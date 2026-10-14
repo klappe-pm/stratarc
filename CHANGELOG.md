@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+## 0.3.1 - 2026-10-14
+
 ### Changed
 
 - Before asking to deploy, setup names the project checkouts the deploy writes into, since it replaces files such as `AGENTS.md` and `CLAUDE.md` in each.
