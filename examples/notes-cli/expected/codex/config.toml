@@ -1,0 +1,24 @@
+
+approval_policy = "on-request"
+default_permissions = "stratarc"
+[projects."<home>/projects/active/notes-cli"]
+trust_level = "trusted"
+# BEGIN stratarc permissions, generated from permissions.json
+[permissions.stratarc]
+extends = ":workspace"
+
+[permissions.stratarc.workspace_roots]
+"~/projects" = true
+"~/.claude" = true
+"~/.codex" = true
+"~/.gemini" = true
+"~/.cursor" = true
+"~/.config/opencode" = true
+
+[permissions.stratarc.filesystem.":workspace_roots"]
+"**/.env" = "deny"
+
+[permissions.stratarc.network]
+enabled = false
+
+# END stratarc permissions

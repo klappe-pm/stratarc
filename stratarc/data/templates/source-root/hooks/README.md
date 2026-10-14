@@ -1,0 +1,3 @@
+# Hooks
+
+Hooks are scripts a runtime runs when something happens in a session, such as before a tool call. `hooks.json` is the registry: it maps a canonical event name (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop`, `UserPromptSubmit`, `SessionStart`, `SubagentStart` or `SubagentStop`) to a list of groups, each with an optional `matcher` (a tool name pattern) and a list of `{"type": "command", "command": "$HOME/.claude/hooks/<script>.sh", "timeout": <seconds>}` entries. The script itself is `hooks/<kebab-name>.sh`. `stratarc sync` copies each selected script into the runtime and rewrites the registration into that runtime's own format; a runtime with no equivalent for an event drops it and says so.

@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stratarc"
+dynamic = ["version"]
+description = "One agent configuration source, rendered into every agent runtime."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Kevin Lappe" }]
+keywords = ["ai-agents", "claude-code", "codex", "gemini-cli", "cursor", "opencode", "configuration", "dotfiles"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest", "jsonschema"]
+
+[project.scripts]
+stratarc = "stratarc.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/klappe-pm/stratarc"
+Repository = "https://github.com/klappe-pm/stratarc"
+Documentation = "https://github.com/klappe-pm/stratarc/blob/main/docs/README.md"
+Changelog = "https://github.com/klappe-pm/stratarc/blob/main/CHANGELOG.md"
+Issues = "https://github.com/klappe-pm/stratarc/issues"
+
+[tool.hatch.version]
+path = "stratarc/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["stratarc"]
+# Ship every file under stratarc/, including non-Python data and dotfiles.
+artifacts = ["stratarc/data/**"]
+
+[tool.hatch.build.targets.sdist]
+include = ["stratarc", "tests", "examples", "README.md", "LICENSE", "pyproject.toml"]
+artifacts = ["stratarc/data/**"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: builds a wheel and installs it into a fresh virtual environment (deselect with -m 'not slow')",
+    "shell: a tests/**/*.test.sh file run with bash; fails on a non-zero exit",
+    "bun: a tests/**/*.test.ts file run with bun test; skipped when bun is not on PATH",
+]
