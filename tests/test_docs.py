@@ -78,6 +78,11 @@ def test_the_generator_check_fails_with_status_6_after_a_generated_page_is_edite
     assert subprocess.run(command, capture_output=True, text=True).returncode == 6
 
 
+def test_the_generated_usage_line_shows_a_required_option_without_brackets():
+    page = (DOCS / "reference" / "generated" / "commands.md").read_text(encoding="utf-8")
+    assert "stratarc adapter deprecate name --reason REASON --end-date YYYY-MM-DD [--replacement REPLACEMENT]" in page
+
+
 @pytest.mark.parametrize("path", markdown_files(), ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
 def test_every_relative_link_resolves(path):
     text = prose(path)
