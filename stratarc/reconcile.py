@@ -666,7 +666,7 @@ def refresh_snapshots(
     return changes
 
 
-def reconcile(check: bool = False) -> tuple[bool, list[str]]:
+def reconcile(check: bool = False, snapshots: bool = True) -> tuple[bool, list[str]]:
     control_plane = control_plane_path()
     cp = ControlPlane.load(control_plane)
     rule_tiers = load_rule_tiers()
@@ -680,12 +680,13 @@ def reconcile(check: bool = False) -> tuple[bool, list[str]]:
         notes.append(str(control_plane))
         if not check:
             control_plane.write_text(document, encoding="utf-8")
-    if not is_linked_worktree():
+    if snapshots and not is_linked_worktree():
         notes.extend(refresh_snapshots(active_checkout_paths(), document, check))
     return changed or bool(notes), notes
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, snapshots: bool = True) -> int:
+    """snapshots=False refreshes only the source root's control-plane.md, for a caller that has not been told it may write into project checkouts."""
     parser = argparse.ArgumentParser(prog="stratarc reconcile")
     parser.add_argument("--check", action="store_true")
     parser.add_argument(
@@ -699,7 +700,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.root:
         configure_root(pathlib.Path(args.root))
     try:
-        changed, notes = reconcile(check=args.check)
+        changed, notes = reconcile(check=args.check, snapshots=snapshots)
         linked = is_linked_worktree()
     except (ManifestUnreadable, ConfigError) as error:
         print(f"control-plane: refusing; {error}; nothing was written", file=sys.stderr)

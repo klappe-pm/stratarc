@@ -219,7 +219,8 @@ def _run(ask: Ask, say: Say, written: list[str]) -> int:
     say(f"Recorded the source root in {_display(config)}, so `stratarc` finds it from any directory.")
 
     root_args = ["--root", str(root)]
-    if reconcile.main(root_args) not in (0, None):
+    # Project snapshots wait for the deploy: sync writes them, and only after a yes.
+    if reconcile.main(root_args, snapshots=False) not in (0, None):
         say("The control plane could not be refreshed; run `stratarc reconcile` to see why.")
         _next_steps(say)
         return 1
