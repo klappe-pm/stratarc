@@ -124,10 +124,8 @@ def _usage(path: str, parser: argparse.ArgumentParser, skip: set[str]) -> str:
         parts.append(f"[{name}]" if optional else name)
     for action in _own_options(parser, skip):
         flag = action.option_strings[0]
-        if action.nargs == 0:
-            parts.append(f"[{flag}]")
-        else:
-            parts.append(f"[{flag} {action.metavar or action.dest.upper()}]")
+        text = flag if action.nargs == 0 else f"{flag} {action.metavar or action.dest.upper()}"
+        parts.append(text if action.required else f"[{text}]")
     return " ".join(parts)
 
 
