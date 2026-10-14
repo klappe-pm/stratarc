@@ -384,7 +384,7 @@ stratarc adapter status [--runtime-version RUNTIME=VERSION]
 mark an adapter as no longer supported (needs --reason and --end-date).
 
 ```text
-stratarc adapter deprecate name [--reason REASON] [--end-date YYYY-MM-DD] [--replacement REPLACEMENT]
+stratarc adapter deprecate name --reason REASON --end-date YYYY-MM-DD [--replacement REPLACEMENT]
 ```
 
 | argument | meaning |
