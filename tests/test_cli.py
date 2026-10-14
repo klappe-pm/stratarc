@@ -187,6 +187,30 @@ def test_an_engine_command_outside_a_source_root_is_refused(monkeypatch, capsys,
     assert list(empty.iterdir()) == []
 
 
+@pytest.mark.parametrize("command", sorted(PASSTHROUGH))
+def test_a_forwarded_unknown_option_outside_a_source_root_is_a_usage_error(command, monkeypatch, capsys, tmp_path, stratarc_home):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.chdir(empty)
+    monkeypatch.delenv("STRATARC_SOURCE", raising=False)
+    # gen-rules-digest needs its mode flag, or that is the usage error reported.
+    mode = ["--print"] if command == "gen-rules-digest" else []
+    assert main([command, *mode, "--bogus"]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith(f"usage: stratarc {command}")
+    assert "error msg-1014" in err and "unrecognized arguments: --bogus" in err
+    assert "msg-1009" not in err
+    assert list(empty.iterdir()) == []
+
+
+def test_a_forwarded_usage_error_with_json_prints_one_envelope(capsys, stratarc_home):
+    assert main(["--json", "validate", "--checks", "nope"]) == 2
+    captured = capsys.readouterr()
+    body = json.loads(captured.out)
+    assert body["error"]["code"] == "msg-1014" and body["error"]["param"] == "validate"
+    assert captured.err == ""
+
+
 def test_python_dash_m_entry(tmp_path: Path):
     result = subprocess.run(
         [sys.executable, "-m", "stratarc", "--root", str(tmp_path / "absent"), "diff"],

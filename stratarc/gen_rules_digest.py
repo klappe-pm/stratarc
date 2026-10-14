@@ -48,7 +48,8 @@ from stratarc.rules_digest import (
 )
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The command's parser; `stratarc` checks a command line against it before it looks for a source root."""
     parser = argparse.ArgumentParser(
         prog="stratarc gen-rules-digest",
         description=(
@@ -127,7 +128,11 @@ def main(argv: list[str] | None = None) -> int:
             "control-plane.md."
         ),
     )
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     source_root = (
         args.source_root.expanduser().resolve() if args.source_root is not None else None
     )

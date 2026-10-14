@@ -316,7 +316,8 @@ def declared(
     return out
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The command's parser; `stratarc` checks a command line against it before it looks for a source root."""
     parser = argparse.ArgumentParser(
         prog="stratarc components",
         description=(
@@ -338,7 +339,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--manifest", type=pathlib.Path, default=None, help="manifest to read (default: <source root>/components.json)")
     parser.add_argument("--list", action="store_true", help="print what is declared")
     parser.add_argument("--root", type=pathlib.Path, default=None, help=argparse.SUPPRESS)
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = build_parser().parse_args(argv)
     manifest_path = args.manifest or source_root(args.root) / MANIFEST_NAME
     try:
         document = load(manifest_path)

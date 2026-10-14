@@ -281,6 +281,21 @@ def _engine_main(command: str) -> Callable[[list[str] | None], int]:
     return components.main
 
 
+def _check_passthrough_usage(command: str, argv: list[str]) -> None:
+    """Parse a forwarded command line with the module's own parser, so an argument it does not take is reported before the source root is looked for."""
+    import importlib
+
+    if any(flag in argv for flag in ("-h", "--help")):
+        return
+    parser = importlib.import_module(f"stratarc.{command.replace('-', '_')}").build_parser()
+
+    def error(message: str):
+        raise _UsageError(parser, message)
+
+    parser.error = error  # type: ignore[method-assign]
+    parser.parse_args(argv)
+
+
 def _sync_family_argv(args: argparse.Namespace) -> list[str]:
     command = args.command
     argv: list[str] = {"check": ["--check"], "diff": ["--diff"], "prune": ["--prune"]}.get(command, [])
@@ -605,6 +620,14 @@ def _parse(tokens: list[str]) -> argparse.Namespace:
     return args
 
 
+def _finish_usage(args: argparse.Namespace, flags: argparse.Namespace, usage: _UsageError) -> int:
+    if not flags.json:
+        usage.parser.print_usage(sys.stderr)
+    name = args.command if args.command and not args.command.startswith("-") else None
+    guide = f"stratarc help {name}" if name else "stratarc help"
+    return _finish(args, flags, 2, {}, CliError("msg-1014", param=name or "option", detail=usage.message, help=guide))
+
+
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
     flags, rest = _global_parser().parse_known_args(tokens)
@@ -623,14 +646,13 @@ def main(argv: list[str] | None = None) -> int:
     except CliError as error:
         return _finish(args, flags, error.exit, {}, error)
     except _UsageError as usage:
-        if not flags.json:
-            usage.parser.print_usage(sys.stderr)
-        name = args.command if args.command and not args.command.startswith("-") else None
-        guide = f"stratarc help {name}" if name else "stratarc help"
-        return _finish(args, flags, 2, {}, CliError("msg-1014", param=name or "option", detail=usage.message, help=guide))
+        return _finish_usage(args, flags, usage)
 
     try:
         with _environment(_flag_environment(flags)):
+            # Inside the flag environment, because a forwarded module can read the source root when it is imported.
+            if args.command in PASSTHROUGH:
+                _check_passthrough_usage(args.command, forwarded)
             if args.command is None:
                 code, data = _home_start(flags)
                 return _finish(args, flags, code, data)
@@ -643,6 +665,8 @@ def main(argv: list[str] | None = None) -> int:
         return _finish(args, flags, code, data)
     except CliError as error:
         return _finish(args, flags, error.exit, {}, error)
+    except _UsageError as usage:
+        return _finish_usage(args, flags, usage)
     except _Reported as reported:
         # The report text already lists the problem and its recovery, so text mode prints no second copy.
         return _finish(args, flags, reported.error.exit, reported.data, reported.error if flags.json else None)

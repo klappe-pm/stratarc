@@ -21,6 +21,7 @@ All notable changes to this project are documented in this file. The format foll
 
 - A command run in a directory with no `stratarc.toml` at or above it, and no other source root configured, is refused with `msg-1009`. It used to treat that directory as a source root, and `sync` wrote a `control-plane.md` into it before failing. A source root you run commands from without `--root` or `STRATARC_SOURCE` now needs a `stratarc.toml`; an empty one uses the defaults.
 - `stratarc doctor` reports that case as a problem, and reports a remembered source root that no longer holds `stratarc.toml` (`msg-1013`).
+- `validate`, `projects`, `gen-rules-digest` and `components` check their arguments before looking for the source root, and report every usage error (an argument they do not take, a missing required one, a value outside the choices) with `msg-1014`, also with `--json`, in place of argparse's own error line. Outside a source root, `stratarc validate --bogus` reported the missing source root instead.
 
 ## 0.2.0 - 2026-10-14
 
