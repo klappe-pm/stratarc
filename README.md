@@ -32,6 +32,23 @@ If you use more than one coding agent, you already know the problem. Claude Code
 
 Stratarc gives you one place to write it all down. You keep a single source tree of instructions, rules, hooks, skills, commands, agents and permissions. Stratarc compiles that tree into the native format of any runtime you enable and deploys it into the right directory. Edit once, sync, and every agent sees the same configuration.
 
+## Why Stratarc?
+
+| Without Stratarc | With Stratarc |
+| --- | --- |
+| Edit five config files, forget one, and the runtimes diverge | Edit one source, sync once, and every runtime stays in step |
+| Copy rules between runtimes and fix the formatting by hand | Write a rule once; each adapter renders the runtime's own format |
+| No record of what is deployed where | The control plane lists every item and the runtimes and projects it reaches |
+| Hand-merge project config into global settings | Project configuration is delivered from the same source tree |
+| Locked to the runtimes a tool ships with | Bring your own runtime with one Python file |
+
+## Who This Is For
+
+- Developers using two or more AI coding agents who want them to behave the same way.
+- Teams standardizing agent configuration across members, with the source tree kept in git.
+- Anyone tired of copying rules between runtimes.
+- Anyone who wants to try a new agent without rewriting their setup.
+
 ## Highlights
 
 - **Any runtime, one source.** Claude Code, Codex, Gemini CLI, Cursor and OpenCode are all rendered from the same tree; enable the ones you use.
