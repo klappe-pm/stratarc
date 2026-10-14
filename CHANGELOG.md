@@ -16,6 +16,7 @@ All notable changes to this project are documented in this file. The format foll
 
 - An argument a command does not take is reported against that command's usage, not the top-level one, and with `--json` every usage error prints one envelope (`msg-1010`, `msg-1011`, `msg-1014`).
 - `init` ends by printing the commands to run next.
+- With `--json`, an engine command's `data.exit` is the status stratarc exits with. It used to be the status the command's module returned, so `stratarc --json check` reported `"exit": 1` on drift while exiting 6. A caller that read 1 as drift must now read 6.
 
 ### Fixed
 

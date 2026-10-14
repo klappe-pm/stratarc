@@ -531,8 +531,17 @@ def test_json_drift_envelope(ready, monkeypatch, capsys):
     assert main(["--json", "check"]) == 6
     body = json.loads(capsys.readouterr().out)
     assert body["ok"] is False
+    assert body["data"]["exit"] == 6
     assert body["error"]["code"] == "drift"
+    assert body["error"]["message"] == "stratarc check exited 6"
     assert set(body["error"]) == {"code", "message", "param", "hint"}
+
+
+def test_json_envelope_reports_an_unknown_module_status_as_failure(ready, monkeypatch, capsys):
+    patch_main(monkeypatch, "sync", 9)
+
+    assert main(["--json", "diff"]) == 1
+    assert json.loads(capsys.readouterr().out)["data"]["exit"] == 1
 
 
 def test_json_error_envelope_from_the_catalog(stratarc_home, tmp_path, capsys):
