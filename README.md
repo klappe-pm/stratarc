@@ -53,7 +53,7 @@ pipx install stratarc
 Or pin a tagged release straight from GitHub:
 
 ```bash
-pipx install git+https://github.com/klappe-pm/stratarc@v0.2.0
+pipx install git+https://github.com/klappe-pm/stratarc@v0.3.0
 ```
 
 Then check the install and see which runtimes Stratarc found on your machine:

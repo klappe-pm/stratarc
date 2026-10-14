@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-14
+
 ### Added
 
 - `stratarc` with no command starts a guided setup the first time: it creates or adopts a source root, enables the runtimes it finds installed, previews the first deploy and deploys only on an explicit yes. Once set up, it prints where the source root is and the commands to run next. Outside a terminal it prints the help.
