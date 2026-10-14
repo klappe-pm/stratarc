@@ -23,6 +23,7 @@ All notable changes to this project are documented in this file. The format foll
 - A command run in a directory with no `stratarc.toml` at or above it, and no other source root configured, is refused with `msg-1009`. It used to treat that directory as a source root, and `sync` wrote a `control-plane.md` into it before failing. A source root you run commands from without `--root` or `STRATARC_SOURCE` now needs a `stratarc.toml`; an empty one uses the defaults.
 - `stratarc doctor` reports that case as a problem, and reports a remembered source root that no longer holds `stratarc.toml` (`msg-1013`).
 - The generated command reference shows a required option without brackets in its usage line, so `adapter deprecate` no longer presents `--reason` and `--end-date` as optional.
+- `validate`, `projects`, `gen-rules-digest` and `components` check their arguments before looking for the source root, so `stratarc validate --bogus` outside a source root reports the usage error (`msg-1014`) instead of `msg-1009`.
 - An argument a forwarded command does not take is reported before a missing required one, so `stratarc gen-rules-digest --bogus` names `--bogus` instead of the missing mode flag.
 
 ## 0.2.0 - 2026-10-14
