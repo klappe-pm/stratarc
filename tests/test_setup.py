@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -56,6 +57,16 @@ def test_setup_deploys_only_on_yes(home: Path):
     code = setup.run(ask=scripted(str(home / "src"), "claude", "y"), say=lambda _line: None)
     assert code == 0
     assert (home / ".claude" / "CLAUDE.md").is_file()
+
+
+def test_declining_the_deploy_leaves_project_checkouts_untouched(home: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("STRATARC_PROJECTS_DIR", raising=False)
+    demo = home / "projects" / "active" / "demo"
+    demo.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(demo)], check=True)
+    assert setup.run(ask=scripted(str(home / "src"), "claude", "n"), say=lambda _line: None) == 0
+    assert (home / "src" / "control-plane.md").is_file()
+    assert [path.name for path in demo.iterdir()] == [".git"]
 
 
 def test_setup_warns_about_existing_files_and_backs_up_what_it_replaces(home: Path):

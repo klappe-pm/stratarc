@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+### Fixed
+
+- Setup no longer writes into project checkouts before you answer the deploy prompt. In 0.3.0 it wrote `.docs/stratarc-control-plane.md` into every git checkout under the projects root's `active/` folder even when you answered `n`. It now refreshes only the source root's `control-plane.md`, and the snapshots are written by the deploy.
+
 ## 0.3.0 - 2026-10-14
 
 ### Added
