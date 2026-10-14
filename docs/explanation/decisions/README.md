@@ -28,6 +28,7 @@ Each record is a file named `YYYY-MM-DD-short-title.md` with these sections: Sta
 - [The Home Is Dot Stratarc with an Environment Override](2026-10-09-the-home-is-dot-stratarc-with-an-environment-override.md), which settles the home location left open in the home layout record
 - [Source Root Files Keep Their Mode and the Home Stays Private](2026-10-10-source-root-files-keep-their-mode-and-the-home-stays-private.md), which refines the file modes in the home layout record
 - [Optional Change Log](2026-10-09-optional-change-log.md)
+- [Setup Remembers the Source Root in the Home](2026-10-14-setup-remembers-the-source-root-in-the-home.md), which adds a step to the source root precedence
 
 ### Command Line
 

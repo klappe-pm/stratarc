@@ -33,6 +33,8 @@ Global options are accepted before or after the command.
 
 | command | summary |
 | --- | --- |
+| [`help`](#help) | explain one command, or list them all |
+| [`setup`](#setup) | walk through creating a source root, choosing runtimes and the first deploy |
 | [`init`](#init) | scaffold a new source root into TARGET |
 | [`doctor`](#doctor) | report the health of the install, the home and the source root |
 | [`sync`](#sync) | render the source into every enabled runtime and managed project |
@@ -45,6 +47,37 @@ Global options are accepted before or after the command.
 | [`gen-rules-digest`](#gen-rules-digest) | render or check the rules digest in instruction files |
 | [`components`](#components) | validate components.json and list what it declares |
 | [`adapter`](#adapter) | manage the translators from the source to a runtime |
+
+## `help`
+
+explain one command, or list them all.
+
+```text
+stratarc help [COMMAND]
+```
+
+| argument | meaning |
+| --- | --- |
+| `COMMAND` | The command to explain. |
+
+## `setup`
+
+walk through creating a source root, choosing runtimes and the first deploy.
+
+```text
+usage: stratarc components [-h] [--manifest MANIFEST] [--list]
+
+options:
+  -h, --help           show this help message and exit
+  --manifest MANIFEST  manifest to read (default: <source
+                       root>/components.json)
+  --list               print what is declared
+
+examples:
+  stratarc components                                   validate the manifest
+  stratarc components --list                            validate, then list each component
+  stratarc components --manifest ./components.json      validate a manifest at another path
+```
 
 ## `init`
 
@@ -152,6 +185,12 @@ options:
   --strict              exit 1 when any error-level finding exists
   --checks {generic,private,all}
                         which class of checks to run (default: all)
+
+examples:
+  stratarc validate                          report every finding, exit 0
+  stratarc validate --strict                 exit 1 when any error is found
+  stratarc validate --checks generic --root ~/agent-source
+                                             run only the built in checks on another root
 ```
 
 ## `projects`
@@ -159,17 +198,27 @@ options:
 deliver projects-root/ into the managed project checkouts.
 
 ```text
-usage: stratarc projects [-h] [--check] [--only ONLY] [--adopt NAME]
+usage: stratarc projects [-h] [--check] [--only NAME] [--adopt NAME]
                          [--verify] [--root PATH]
 
 options:
   -h, --help    show this help message and exit
-  --check
-  --only ONLY
-  --adopt NAME
+  --check       dry run: print what each project would receive, write nothing,
+                exit 1 if any project is stale
+  --only NAME   deliver only NAME, the name of its directory under projects-
+                root, instead of every project
+  --adopt NAME  first time capture: copy project NAME's existing checkout
+                config into projects-root/NAME/, then exit
   --verify      report manifest and filesystem disagreement, exit 1 if any
   --root PATH   the source root to deliver from (default: $STRATARC_SOURCE,
                 then the nearest stratarc.toml, then the current directory)
+
+examples:
+  stratarc projects                       deliver every project
+  stratarc projects --check               show what would change, exit 1 if stale
+  stratarc projects --only my-project     deliver one project
+  stratarc projects --adopt my-project    capture an existing checkout's config
+                                          into projects-root/my-project/
 ```
 
 ## `gen-rules-digest`
@@ -204,6 +253,11 @@ options:
   --column COLUMN       Render this control-plane.md column's opt-ins instead
                         of the global tier plus the common tier. Read from the
                         source root's control-plane.md.
+
+examples:
+  stratarc gen-rules-digest --print                  show the digest
+  stratarc gen-rules-digest --embed AGENTS.md        refresh the digest in AGENTS.md
+  stratarc gen-rules-digest --check AGENTS.md        exit non-zero if it drifted (for CI)
 ```
 
 ## `components`
@@ -218,6 +272,11 @@ options:
   --manifest MANIFEST  manifest to read (default: <source
                        root>/components.json)
   --list               print what is declared
+
+examples:
+  stratarc components                                   validate the manifest
+  stratarc components --list                            validate, then list each component
+  stratarc components --manifest ./components.json      validate a manifest at another path
 ```
 
 ## `adapter`
@@ -278,7 +337,7 @@ stratarc adapter register path-or-package [--replace]
 
 ### `adapter add`
 
-record the runtime versions an adapter supports, from a manifest path or package; the adapter itself is adapters/<name>.py in the source root.
+the same as register.
 
 ```text
 stratarc adapter add path-or-package [--replace]
@@ -322,7 +381,7 @@ stratarc adapter status [--runtime-version RUNTIME=VERSION]
 
 ### `adapter deprecate`
 
-mark an adapter as no longer supported.
+mark an adapter as no longer supported (needs --reason and --end-date).
 
 ```text
 stratarc adapter deprecate name [--reason REASON] [--end-date YYYY-MM-DD] [--replacement REPLACEMENT]
@@ -334,6 +393,6 @@ stratarc adapter deprecate name [--reason REASON] [--end-date YYYY-MM-DD] [--rep
 
 | option | meaning |
 | --- | --- |
-| `--reason` `REASON` | Why it is deprecated. |
-| `--end-date` `YYYY-MM-DD` | The last day it is supported. |
+| `--reason` `REASON` | Required: why it is deprecated. |
+| `--end-date` `YYYY-MM-DD` | Required: the last day it is supported. |
 | `--replacement` `REPLACEMENT` | The adapter to use instead. |

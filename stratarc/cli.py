@@ -20,14 +20,12 @@ import re
 import sys
 import traceback
 from collections.abc import Callable, Iterator
-from importlib.resources.abc import Traversable
 from pathlib import Path
 
 from stratarc import __version__, messages, paths
 from stratarc.messages import DRIFT, FAILURE, INTERRUPTED, UNAVAILABLE, CliError
-from stratarc.resources import data_dir
-
-TEMPLATE = "templates/source-root"
+from stratarc.setup import TEMPLATE
+DOCS = "https://github.com/klappe-pm/stratarc/blob/main/docs"
 
 # Commands that forward everything after their name to the module's own parser.
 PASSTHROUGH = {
@@ -58,20 +56,18 @@ EXIT_NAMES = {
 }
 
 
-def _copy_tree(src: Traversable, dest: Path) -> int:
-    """Copy a Traversable tree into ``dest``; return the number of files written."""
-    dest.mkdir(parents=True, exist_ok=True)
-    count = 0
-    for child in sorted(src.iterdir(), key=lambda c: c.name):
-        if child.name == "__pycache__":
-            continue
-        target = dest / child.name
-        if child.is_dir():
-            count += _copy_tree(child, target)
-        elif child.is_file():
-            target.write_bytes(child.read_bytes())
-            count += 1
-    return count
+class _UsageError(Exception):
+    """A command line the parser cannot use, raised in place of argparse's print and exit so `--json` still gets one envelope."""
+
+    def __init__(self, parser: argparse.ArgumentParser, message: str) -> None:
+        super().__init__(message)
+        self.parser = parser
+        self.message = message
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message: str):  # type: ignore[override]
+        raise _UsageError(self, message)
 
 
 # ----- the global flags -----
@@ -120,9 +116,12 @@ def _require_source_root() -> Path:
     """The resolved source root, after checking that it exists and its stratarc.toml parses."""
     from stratarc.config import ConfigError, load_config
 
-    root = paths.source_root()
+    root, origin = paths.discover_source()
     if not root.is_dir():
         raise CliError("msg-1001", param="root", path=root)
+    # Falling back to a directory with no stratarc.toml would treat any directory as a source root and write a control plane into it.
+    if origin == paths.ORIGIN_CURRENT and not (root / paths.CONFIG_NAME).is_file():
+        raise CliError("msg-1009", param="root", path=root)
     try:
         load_config(root)
     except ConfigError as error:
@@ -150,17 +149,68 @@ def _require_known_runtime(name: str | None) -> None:
 
 
 def cmd_init(args: argparse.Namespace) -> tuple[int, dict]:
+    from stratarc import setup
+
     target = Path(args.target)
-    if target.exists():
-        if not target.is_dir():
-            raise CliError("msg-1006", param="target", path=target)
-        if any(target.iterdir()):
-            raise CliError("msg-1005", param="target", path=target)
-    template = data_dir(TEMPLATE)
-    if not template.is_dir():
-        raise CliError("msg-1007")
-    count = _copy_tree(template, target)
-    return 0, {"target": str(target), "files": count, "text": f"stratarc init: wrote {count} files to {target}"}
+    count = setup.scaffold(target)
+    text = "\n".join(
+        [
+            f"stratarc init: wrote {count} files to {target}",
+            "next:",
+            f"  set enabled = true for your runtimes in {target / paths.CONFIG_NAME}",
+            f"  stratarc --root {target} reconcile",
+            f"  stratarc --root {target} diff",
+            f"  stratarc --root {target} sync",
+            "or run `stratarc setup` to be walked through it and have the root remembered.",
+        ]
+    )
+    return 0, {"target": str(target), "files": count, "text": text}
+
+
+def _interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def cmd_setup(args: argparse.Namespace) -> tuple[int, dict]:
+    from stratarc import setup
+
+    if args.global_flags.json or not _interactive():
+        raise CliError("msg-1012")
+    return setup.run(), {}
+
+
+def cmd_help(args: argparse.Namespace) -> tuple[int, dict]:
+    topic = args.topic
+    if topic is None:
+        build_parser().print_help()
+        return 0, {}
+    if topic in PASSTHROUGH or topic in RESOURCES:
+        with contextlib.suppress(SystemExit):
+            main([topic, "--help"])
+        return 0, {}
+    parser = _subparsers(build_parser()).get(topic)
+    if parser is None:
+        raise _unknown_command(topic)
+    parser.print_help()
+    return 0, {}
+
+
+def _home_start(flags: argparse.Namespace) -> tuple[int, dict]:
+    """A bare `stratarc`: setup when no source root is found in a terminal, a status summary when one is, help otherwise."""
+    from stratarc import setup
+
+    if flags.json:
+        raise CliError("msg-1011")
+    if not _interactive():
+        build_parser().print_help()
+        return 0, {}
+    root, origin = paths.discover_source()
+    if origin != paths.ORIGIN_CURRENT or (root / paths.CONFIG_NAME).is_file():
+        # A root named by --root or STRATARC_SOURCE is used as given, the way every engine command uses it, so a stale one never sends the user back into setup.
+        if not root.is_dir():
+            raise CliError("msg-1001", param="root", path=root)
+        return 0, {"text": setup.status(root, "--root" if flags.root else origin)}
+    return setup.run(), {}
 
 
 def cmd_doctor(args: argparse.Namespace) -> tuple[int, dict]:
@@ -396,47 +446,103 @@ def _call(entry: Callable[[list[str] | None], int], argv: list[str]) -> int:
 # ----- the parser -----
 
 
+EPILOG = f"""start here:
+  stratarc              guided setup the first time; afterwards, where your source root is and what to run
+  stratarc help CMD     explain one command, with examples
+  stratarc diff         preview what a deploy would change
+  stratarc sync         deploy the source into every enabled runtime
+
+Global options are accepted before or after the command.
+Exit statuses: 0 ok, 1 failure, 2 invalid input, 3 denied, 4 conflict, 5 unavailable, 6 drift, 130 interrupted.
+Docs: {DOCS}/reference/cli.md"""
+
+GLOBAL_NOTE = "Global options such as --root, --home and --json also work here; `stratarc help` lists them."
+
+EXAMPLES = {
+    "help": ["stratarc help", "stratarc help sync"],
+    "setup": ["stratarc setup"],
+    "init": ["stratarc init ~/stratarc-source"],
+    "doctor": ["stratarc doctor", "stratarc doctor --permissions", "stratarc doctor --clean --yes"],
+    "sync": ["stratarc sync", "stratarc sync --dry-run", "stratarc sync --only claude", "stratarc sync --verify --rollback-on-drift"],
+    "check": ["stratarc check", "stratarc check --only codex"],
+    "diff": ["stratarc diff", "stratarc diff --only claude"],
+    "prune": ["stratarc prune --dry-run", "stratarc prune --only gemini"],
+    "reconcile": ["stratarc reconcile", "stratarc reconcile --check"],
+}
+
+
+def _add_command(sub, name: str, help: str):
+    epilog = "examples:\n" + "\n".join(f"  {line}" for line in EXAMPLES[name]) + "\n\n" + GLOBAL_NOTE
+    return sub.add_parser(name, help=help, description=help[0].upper() + help[1:] + ".", epilog=epilog, formatter_class=argparse.RawDescriptionHelpFormatter)
+
+
+def _subparsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return dict(action.choices)
+    return {}
+
+
+def command_names() -> list[str]:
+    return list(_subparsers(build_parser()))
+
+
+def _unknown_command(name: str) -> CliError:
+    import difflib
+
+    close = difflib.get_close_matches(name, command_names(), n=1, cutoff=0.6)
+    suggestion = f" Did you mean `stratarc {close[0]}`?" if close else ""
+    return CliError("msg-1010", param="command", name=name, suggestion=suggestion)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         prog="stratarc",
         description="One agent configuration source, rendered into every agent runtime.",
         parents=[_global_parser()],
         allow_abbrev=False,
-        epilog="Global options are accepted before or after the command.",
+        epilog=EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"stratarc {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="command")
-    sub.required = True
 
-    p = sub.add_parser("init", help="scaffold a new source root into TARGET")
+    p = _add_command(sub, "help", "explain one command, or list them all")
+    p.add_argument("topic", nargs="?", metavar="COMMAND", help="the command to explain")
+    p.set_defaults(func=cmd_help)
+
+    p = _add_command(sub, "setup", "walk through creating a source root, choosing runtimes and the first deploy")
+    p.set_defaults(func=cmd_setup)
+
+    p = _add_command(sub, "init", "scaffold a new source root into TARGET")
     p.add_argument("target", help="directory to create; must be absent or empty")
     p.set_defaults(func=cmd_init)
 
-    p = sub.add_parser("doctor", help="report the health of the install, the home and the source root")
+    p = _add_command(sub, "doctor", "report the health of the install, the home and the source root")
     p.add_argument("--permissions", action="store_true", help="also print what each command reads and writes")
     p.add_argument("--clean", action="store_true", help="also list the old backups and cache the home can shed")
     p.add_argument("--yes", action="store_true", help="with --clean, remove what it lists")
     p.add_argument("--report", action="store_true", help="also write a redacted bundle for an issue report under state/debug")
     p.set_defaults(func=cmd_doctor)
 
-    p = sub.add_parser("sync", help="render the source into every enabled runtime and managed project")
+    p = _add_command(sub, "sync", "render the source into every enabled runtime and managed project")
     p.add_argument("--verify", action="store_true", help="after the write, verify the change against what is deployed; exit 6 on drift")
     p.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift, restore the runtime files from the home backups (implies --verify)")
     p.add_argument("--only", metavar="RUNTIME", help="sync one runtime and skip project delivery")
     p.add_argument("--dry-run", action="store_true", help="print what a sync would change and write nothing")
     p.add_argument("--list", action="store_true", help="list the runtimes and whether each target exists")
 
-    p = sub.add_parser("check", help="report what is out of date, write nothing, exit 6 on drift")
+    p = _add_command(sub, "check", "report what is out of date, write nothing, exit 6 on drift")
     p.add_argument("--only", metavar="RUNTIME", help="check one runtime")
 
-    p = sub.add_parser("diff", help="print what a sync would change, write nothing, exit 0")
+    p = _add_command(sub, "diff", "print what a sync would change, write nothing, exit 0")
     p.add_argument("--only", metavar="RUNTIME", help="diff one runtime")
 
-    p = sub.add_parser("prune", help="delete files a runtime holds that the source no longer produces")
+    p = _add_command(sub, "prune", "delete files a runtime holds that the source no longer produces")
     p.add_argument("--only", metavar="RUNTIME", help="prune one runtime")
     p.add_argument("--dry-run", action="store_true", help="list what would be deleted")
 
-    p = sub.add_parser("reconcile", help="refresh control-plane.md from the source tree")
+    p = _add_command(sub, "reconcile", "refresh control-plane.md from the source tree")
     p.add_argument("--check", action="store_true", help="report what is stale, write nothing, exit 6 if any")
 
     for name, text in {**PASSTHROUGH, **RESOURCES}.items():
@@ -450,6 +556,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _print_error(error: CliError) -> None:
     print(f"error {error.id}  {error.problem}", file=sys.stderr)
     print(f"  {error.recovery}", file=sys.stderr)
+    print(f"  more: {DOCS}/reference/generated/errors.md#{error.id}", file=sys.stderr)
 
 
 def _envelope(ok: bool, data: dict | None, error: dict | None) -> str:
@@ -488,21 +595,45 @@ def _finish(args: argparse.Namespace, flags: argparse.Namespace, code: int, data
 # ----- entry -----
 
 
+def _parse(tokens: list[str]) -> argparse.Namespace:
+    """Parse a built-in command; an argument the command does not take is reported against that command's usage, not the top-level one."""
+    parser = build_parser()
+    args, extras = parser.parse_known_args(tokens)
+    if extras:
+        target = _subparsers(parser).get(args.command or "", parser)
+        target.error(f"unrecognized arguments: {' '.join(extras)}")
+    return args
+
+
 def main(argv: list[str] | None = None) -> int:
     tokens = list(sys.argv[1:] if argv is None else argv)
     flags, rest = _global_parser().parse_known_args(tokens)
 
     command = rest[0] if rest else None
-    if command in PASSTHROUGH or command in RESOURCES:
-        args = argparse.Namespace(command=command)
-        forwarded = rest[1:]
-    else:
-        args = build_parser().parse_args(rest)
-        forwarded = []
-    args.global_flags = flags
+    args = argparse.Namespace(command=command, global_flags=flags)
+    try:
+        if command in PASSTHROUGH or command in RESOURCES:
+            forwarded = rest[1:]
+        elif command is not None and not command.startswith("-") and command not in command_names():
+            raise _unknown_command(command)
+        else:
+            args = _parse(rest)
+            args.global_flags = flags
+            forwarded = []
+    except CliError as error:
+        return _finish(args, flags, error.exit, {}, error)
+    except _UsageError as usage:
+        if not flags.json:
+            usage.parser.print_usage(sys.stderr)
+        name = args.command if args.command and not args.command.startswith("-") else None
+        guide = f"stratarc help {name}" if name else "stratarc help"
+        return _finish(args, flags, 2, {}, CliError("msg-1014", param=name or "option", detail=usage.message, help=guide))
 
     try:
         with _environment(_flag_environment(flags)):
+            if args.command is None:
+                code, data = _home_start(flags)
+                return _finish(args, flags, code, data)
             if args.command in RESOURCES:
                 return cmd_resource(args, forwarded)
             if args.command in PASSTHROUGH or not hasattr(args, "func"):

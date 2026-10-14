@@ -579,7 +579,18 @@ def check_deprecations(*, interactive: bool, ask: Callable[[str], str] | None = 
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="stratarc adapter", description="Manage adapters, the translators from the source to a runtime.")
+    parser = argparse.ArgumentParser(
+        prog="stratarc adapter",
+        description="Manage adapters, the translators from the source to a runtime. Run `stratarc adapter VERB --help` for one verb's arguments.",
+        epilog=(
+            "examples:\n"
+            "  stratarc adapter list                 list every adapter and what it writes\n"
+            "  stratarc adapter status               compare each adapter with the installed runtime\n"
+            "  stratarc adapter show claude          show the claude adapter's manifest\n"
+            "  stratarc adapter new my-runtime       write a starting adapter for a new runtime"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     verbs = parser.add_subparsers(dest="verb", required=True)
 
     def common(sub: argparse.ArgumentParser) -> argparse.ArgumentParser:
@@ -589,8 +600,9 @@ def _parser() -> argparse.ArgumentParser:
     common(verbs.add_parser("list", help="list adapters"))
     for verb, text in (("show", "show one adapter's manifest"), ("remove", "remove a registered manifest; a bundled adapter reverts to its derived one")):
         common(verbs.add_parser(verb, help=text)).add_argument("name", help="the adapter name")
-    for verb in ("register", "add"):
-        sub = common(verbs.add_parser(verb, help="record the runtime versions an adapter supports, from a manifest path or package; the adapter itself is adapters/<name>.py in the source root"))
+    register_help = "record the runtime versions an adapter supports, from a manifest path or package; the adapter itself is adapters/<name>.py in the source root"
+    for verb, text in (("register", register_help), ("add", "the same as register")):
+        sub = common(verbs.add_parser(verb, help=text, description=register_help))
         sub.add_argument("source", metavar="path-or-package", help="a manifest.json file, a directory holding one, or an installed package that ships one")
         sub.add_argument("--replace", action="store_true", help="replace a manifest that is already registered")
     new_parser = common(verbs.add_parser("new", help="write a starting adapter for a runtime into the source root's adapters directory"))
@@ -598,10 +610,17 @@ def _parser() -> argparse.ArgumentParser:
     new_parser.add_argument("--target", metavar="DIR", help="the runtime's directory under the home (default: .<name>)")
     status_parser = common(verbs.add_parser("status", help="compare each adapter with the installed runtime"))
     status_parser.add_argument("--runtime-version", action="append", default=[], metavar="RUNTIME=VERSION", help="override a detected runtime version")
-    deprecate_parser = common(verbs.add_parser("deprecate", help="mark an adapter as no longer supported"))
+    deprecate_parser = common(
+        verbs.add_parser(
+            "deprecate",
+            help="mark an adapter as no longer supported (needs --reason and --end-date)",
+            epilog="example:\n  stratarc adapter deprecate my-runtime --reason \"the runtime was retired\" --end-date 2026-12-31",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
+    )
     deprecate_parser.add_argument("name", help="the adapter name")
-    deprecate_parser.add_argument("--reason", required=True, help="why it is deprecated")
-    deprecate_parser.add_argument("--end-date", required=True, metavar="YYYY-MM-DD", help="the last day it is supported")
+    deprecate_parser.add_argument("--reason", required=True, help="required: why it is deprecated")
+    deprecate_parser.add_argument("--end-date", required=True, metavar="YYYY-MM-DD", help="required: the last day it is supported")
     deprecate_parser.add_argument("--replacement", help="the adapter to use instead")
     return parser
 

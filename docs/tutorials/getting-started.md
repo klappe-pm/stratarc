@@ -20,7 +20,19 @@ stratarc --version
 
 The [install guide](../how-to-guides/install.md) covers other install methods and upgrading.
 
-## Scaffold a Source Root
+## Run Setup
+
+Run the command on its own:
+
+```bash
+stratarc
+```
+
+The first time, it starts a guided setup. It asks where your source root should live (press Enter for `~/stratarc-source`), writes the bundled template there, lists the runtimes it found installed and enables the ones you choose, then shows a preview of the first deploy. It deploys only if you answer `y`; answer `n` for now, since this tutorial adds a rule first. Setup records the source root in `~/.stratarc/config.toml`, so later commands find it from any directory, and running `stratarc` again prints where it is and what to run next.
+
+If you would rather set things up by hand, or are working in a script, scaffold with `init` instead and edit the runtimes yourself, as the next two sections describe.
+
+## Scaffold a Source Root by Hand
 
 Pick a directory that does not exist yet, or is empty:
 
@@ -30,9 +42,9 @@ stratarc init ~/stratarc-source
 
 `init` writes the bundled template: `AGENTS.md`, `stratarc.toml`, `permissions.json`, `components.json`, `control-plane.md`, and the `rules/`, `hooks/`, `skills/`, `commands/`, `agents/` and `projects-root/` directories, each with a short README that says what belongs in it. It refuses to write into a directory that already holds files. This directory is your source of truth. Put it in git.
 
-## Choose Your Runtimes
+## Choose Your Runtimes by Hand
 
-Open `~/stratarc-source/stratarc.toml`. There is one table per runtime. Set `enabled = true` for each runtime you use and leave the rest at `false`. A runtime is deployed to only when its directory already exists, so one you have not installed is skipped.
+Setup already did this. Otherwise, open `~/stratarc-source/stratarc.toml`. There is one table per runtime. Set `enabled = true` for each runtime you use and leave the rest at `false`. A runtime is deployed to only when its directory already exists, so one you have not installed is skipped.
 
 ```bash
 cd ~/stratarc-source && stratarc sync --list

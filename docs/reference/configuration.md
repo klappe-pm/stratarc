@@ -23,7 +23,7 @@ Everything is read when a command runs, never when the module is imported, so a 
 | value | order |
 | --- | --- |
 | home | `STRATARC_HOME`, then `HOME`, then the platform home |
-| source root | `--root`, then `STRATARC_SOURCE`, then the nearest directory at or above the current one that holds `stratarc.toml`, then the current directory |
+| source root | `--root`, then `STRATARC_SOURCE`, then the nearest directory at or above the current one that holds `stratarc.toml`, then `source_root` in `~/.stratarc/config.toml` when that directory still holds `stratarc.toml`, then the current directory; a command that reads the source refuses the current directory when it holds no `stratarc.toml` |
 | projects root | `--projects-root`, then `STRATARC_PROJECTS_DIR`, then `projects_root` in `stratarc.toml`, then `~/projects` |
 | name | `STRATARC_NAME`, then `name` in `stratarc.toml`, then `stratarc` |
 
@@ -40,7 +40,7 @@ Everything is read when a command runs, never when the module is imported, so a 
 
 ## The Home Directory
 
-Stratarc keeps machine state, not project state, in `~/.stratarc`: `config.toml` (settings such as `logging`), `adapters/` (registered adapter manifests), `state/`, `backups/`, `logs/` and `cache/`. Directories are mode 0700 and files 0600. A file written by a newer Stratarc is never rewritten by an older one. `stratarc doctor --clean` removes only old backups and the cache.
+Stratarc keeps machine state, not project state, in `~/.stratarc`: `config.toml` (settings such as `logging`, and `source_root`, the source root `stratarc setup` recorded), `adapters/` (registered adapter manifests), `state/`, `backups/`, `logs/` and `cache/`. Directories are mode 0700 and files 0600. A file written by a newer Stratarc is never rewritten by an older one. `stratarc doctor --clean` removes only old backups and the cache.
 
 ## Schemas
 

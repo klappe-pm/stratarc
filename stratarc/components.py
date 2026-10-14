@@ -317,7 +317,24 @@ def declared(
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(prog="stratarc components", description="validate components.json")
+    parser = argparse.ArgumentParser(
+        prog="stratarc components",
+        description=(
+            "Validate components.json, the one manifest of what the source root does not author\n"
+            "itself: MCP servers, plugins, foreign hook groups, third party skills, command line\n"
+            "dependencies and per runtime settings. It reports every unknown key, missing field,\n"
+            "unknown runtime and literal secret (secrets belong in secret:// references), and\n"
+            "exits 1 when it finds any. With --list it also prints each declared component as\n"
+            "section, name and runtimes."
+        ),
+        epilog=(
+            "examples:\n"
+            "  stratarc components                                   validate the manifest\n"
+            "  stratarc components --list                            validate, then list each component\n"
+            "  stratarc components --manifest ./components.json      validate a manifest at another path"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--manifest", type=pathlib.Path, default=None, help="manifest to read (default: <source root>/components.json)")
     parser.add_argument("--list", action="store_true", help="print what is declared")
     parser.add_argument("--root", type=pathlib.Path, default=None, help=argparse.SUPPRESS)
