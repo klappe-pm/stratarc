@@ -34,3 +34,4 @@ Each record is a file named `YYYY-MM-DD-short-title.md` with these sections: Sta
 
 - [Exit Code Map](2026-10-09-exit-code-map.md)
 - [Message Catalog with IDs](2026-10-09-message-catalog-with-ids.md)
+- [The JSON Envelope Reports the Status Stratarc Exits With](2026-10-14-the-json-envelope-reports-the-status-stratarc-exits-with.md), which refines the envelope in the exit code map

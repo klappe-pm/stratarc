@@ -60,7 +60,7 @@ With `--json` a command prints exactly one object on standard output and exits w
 }
 ```
 
-`ok` is true and `error` is null on success, and `data` then holds the command's result. Without `--json`, a refusal prints one line headed by its message id, one line of recovery and a link to the message's entry in [Errors](generated/errors.md) to standard error.
+`ok` is true and `error` is null on success, and `data` then holds the command's result. For `sync`, `check`, `diff`, `prune`, `reconcile`, `validate`, `projects`, `gen-rules-digest` and `components`, `data` holds `command`, `exit`, `stdout` and `stderr` whenever the command ran, whatever its status; a refusal before it runs, such as `msg-1001`, leaves `data` null. `exit` is the status stratarc exits with, after the drift mapping under [Exit Statuses](#exit-statuses), so `stratarc --json check` on a drifted deployment reports `"exit": 6`. Without `--json`, a refusal prints one line headed by its message id, one line of recovery and a link to the message's entry in [Errors](generated/errors.md) to standard error.
 
 ## Mistyped Commands and Arguments
 

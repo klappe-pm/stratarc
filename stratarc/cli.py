@@ -332,13 +332,15 @@ def cmd_engine(args: argparse.Namespace, rest: list[str]) -> tuple[int, dict]:
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             raw = _call(entry, argv)
-        data = {"command": command, "exit": raw, "stdout": out.getvalue(), "stderr": err.getvalue()}
+        data = {"command": command, "stdout": out.getvalue(), "stderr": err.getvalue()}
     else:
         raw = _call(entry, argv)
-        data = {"command": command, "exit": raw}
+        data = {"command": command}
     code = DRIFT if raw == 1 and _reports_drift(command, argv) else raw
     if code not in (0, *EXIT_NAMES):
         code = FAILURE
+    # The status stratarc exits with, after the drift and failure mapping, so it agrees with the error message and the process status.
+    data["exit"] = code
     return code, data
 
 
