@@ -193,14 +193,24 @@ def test_a_forwarded_unknown_option_outside_a_source_root_is_a_usage_error(comma
     empty.mkdir()
     monkeypatch.chdir(empty)
     monkeypatch.delenv("STRATARC_SOURCE", raising=False)
-    # gen-rules-digest needs its mode flag, or that is the usage error reported.
-    mode = ["--print"] if command == "gen-rules-digest" else []
-    assert main([command, *mode, "--bogus"]) == 2
+    assert main([command, "--bogus"]) == 2
     err = capsys.readouterr().err
     assert err.startswith(f"usage: stratarc {command}")
     assert "error msg-1014" in err and "unrecognized arguments: --bogus" in err
     assert "msg-1009" not in err
     assert list(empty.iterdir()) == []
+
+
+def test_a_forwarded_unknown_option_is_reported_before_a_missing_required_one(capsys, stratarc_home):
+    assert main(["gen-rules-digest", "--bogus"]) == 2
+    err = capsys.readouterr().err
+    assert "error msg-1014  The arguments cannot be used: unrecognized arguments: --bogus" in err
+    assert "is required" not in err
+
+
+def test_a_forwarded_command_missing_its_required_mode_is_still_a_usage_error(capsys, stratarc_home):
+    assert main(["gen-rules-digest"]) == 2
+    assert "one of the arguments --print --embed --check is required" in capsys.readouterr().err
 
 
 def test_a_forwarded_usage_error_with_json_prints_one_envelope(capsys, stratarc_home):
