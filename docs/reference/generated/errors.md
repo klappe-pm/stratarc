@@ -16,6 +16,12 @@ Every message the command line can print, generated from `stratarc/messages.py`.
 | [`msg-1006`](#msg-1006) | 2 invalid-input | {path} exists and is not a directory. |
 | [`msg-1007`](#msg-1007) | 5 unavailable | The packaged source-root template is missing from this install. |
 | [`msg-1008`](#msg-1008) | 1 failure | The command {command} stopped unexpectedly: {detail} |
+| [`msg-1009`](#msg-1009) | 2 invalid-input | No stratarc.toml was found in {path} or any directory above it. |
+| [`msg-1010`](#msg-1010) | 2 invalid-input | {name} is not a stratarc command.{suggestion} |
+| [`msg-1011`](#msg-1011) | 2 invalid-input | No command was given. |
+| [`msg-1012`](#msg-1012) | 2 invalid-input | Setup needs an interactive terminal, and this one is not. |
+| [`msg-1013`](#msg-1013) | 2 invalid-input | The remembered source root {path} no longer holds stratarc.toml. |
+| [`msg-1014`](#msg-1014) | 2 invalid-input | The arguments cannot be used: {detail} |
 | [`msg-1110`](#msg-1110) | 2 invalid-input | The source root cannot be read: {detail} |
 | [`msg-1112`](#msg-1112) | 5 unavailable | A file was written by a newer stratarc and was left unchanged: {detail} |
 | [`msg-1114`](#msg-1114) | 5 unavailable | An adapter does not support this install: {detail} |
@@ -106,6 +112,54 @@ Ends the command with status 1 (failure).
 Problem: The command {command} stopped unexpectedly: {detail}
 
 Recovery: Run it again with --debug to see the traceback, and include it in an issue report.
+
+### `msg-1009`
+
+Ends the command with status 2 (invalid-input).
+
+Problem: No stratarc.toml was found in {path} or any directory above it.
+
+Recovery: Run `stratarc` in a terminal to set up a source root, change into your source root, or pass --root.
+
+### `msg-1010`
+
+Ends the command with status 2 (invalid-input).
+
+Problem: {name} is not a stratarc command.{suggestion}
+
+Recovery: Run `stratarc help` to list every command.
+
+### `msg-1011`
+
+Ends the command with status 2 (invalid-input).
+
+Problem: No command was given.
+
+Recovery: Run `stratarc help` to list every command, or run `stratarc` in a terminal for guided setup.
+
+### `msg-1012`
+
+Ends the command with status 2 (invalid-input).
+
+Problem: Setup needs an interactive terminal, and this one is not.
+
+Recovery: Run `stratarc setup` in a terminal, or scaffold with `stratarc init DIR` and edit its stratarc.toml.
+
+### `msg-1013`
+
+Ends the command with status 2 (invalid-input).
+
+Problem: The remembered source root {path} no longer holds stratarc.toml.
+
+Recovery: Run `stratarc setup` to choose a source root again, or pass --root.
+
+### `msg-1014`
+
+Ends the command with status 2 (invalid-input).
+
+Problem: The arguments cannot be used: {detail}
+
+Recovery: Run `stratarc help {command}` to see what the command accepts.
 
 ### `msg-1110`
 

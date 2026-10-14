@@ -2,10 +2,16 @@
 
 This page describes how the `stratarc` command behaves as a whole: how it finds your source root, what the global options do, the JSON output and the exit statuses. Every command and option is listed in the generated [Commands](generated/commands.md) page, and every message in [Errors](generated/errors.md). For when to use a command, see the [how-to guides](../how-to-guides/README.md).
 
+## Running Stratarc with No Command
+
+`stratarc` on its own adapts to where it runs. In a terminal with no source root found, it starts `stratarc setup`. In a terminal with a source root found, it prints where the source root is, which runtimes are enabled and the commands to run next, and exits 0. Outside a terminal it prints the help and exits 0, so a script never waits on a prompt. With `--json` it is invalid input (`msg-1011`) and exits 2.
+
 ## Commands
 
 | command | does |
 | --- | --- |
+| `help [COMMAND]` | lists every command, or explains one with examples; `stratarc help sync` is the same as `stratarc sync --help` |
+| `setup` | walks through creating or adopting a source root, choosing runtimes from those installed, previewing the first deploy and deploying on an explicit yes; records the source root in `~/.stratarc/config.toml`; needs a terminal |
 | `init TARGET` | writes a new source root from the bundled template into an absent or empty directory |
 | `doctor` | reports the health of the install, the home and the source root; `--permissions`, `--clean` and `--report` extend it |
 | `sync` | renders the source into every enabled runtime and managed project |
@@ -31,11 +37,11 @@ Global options are accepted before or after the command, and each lasts for that
 | `--json` | print one JSON envelope instead of text |
 | `--debug` | print a traceback when a command stops unexpectedly |
 | `--version` | print `stratarc <version>` and exit 0 |
-| `--help` | print the usage summary and exit 0 |
+| `--help` | print the usage summary, a short start here list and the exit statuses, and exit 0 |
 
 ## How the Source Root Is Found
 
-In order: `--root`, the `STRATARC_SOURCE` environment variable, the nearest directory at or above the current one that holds `stratarc.toml`, and the current directory. `stratarc doctor` prints which of these decided. The home is `STRATARC_HOME`, then `HOME`. The projects root is `--projects-root`, then `STRATARC_PROJECTS_DIR`, then `projects_root` in `stratarc.toml`, then `~/projects`. See [Configuration](configuration.md).
+In order: `--root`, the `STRATARC_SOURCE` environment variable, the nearest directory at or above the current one that holds `stratarc.toml`, the source root `stratarc setup` recorded in `~/.stratarc/config.toml` when it still holds `stratarc.toml`, and the current directory. A command that reads the source refuses the current directory when it holds no `stratarc.toml` (`msg-1009`), so running `stratarc sync` in the wrong directory writes nothing. `stratarc doctor` prints which of these decided. The home is `STRATARC_HOME`, then `HOME`. The projects root is `--projects-root`, then `STRATARC_PROJECTS_DIR`, then `projects_root` in `stratarc.toml`, then `~/projects`. See [Configuration](configuration.md).
 
 ## The JSON Envelope
 
@@ -54,7 +60,11 @@ With `--json` a command prints exactly one object on standard output and exits w
 }
 ```
 
-`ok` is true and `error` is null on success, and `data` then holds the command's result. Without `--json`, a refusal prints one line headed by its message id and one line of recovery to standard error.
+`ok` is true and `error` is null on success, and `data` then holds the command's result. Without `--json`, a refusal prints one line headed by its message id, one line of recovery and a link to the message's entry in [Errors](generated/errors.md) to standard error.
+
+## Mistyped Commands and Arguments
+
+An unknown command is refused with `msg-1010`, which names the closest command when one is near (`stratarc synk` suggests `stratarc sync`). An argument a command does not take is refused with `msg-1014`, after that command's own usage line, and its recovery names `stratarc help COMMAND`. Both exit 2, and with `--json` both print one envelope like any other refusal.
 
 ## Exit Statuses
 

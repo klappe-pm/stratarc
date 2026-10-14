@@ -17,15 +17,10 @@ def _writable(path: Path) -> bool:
     return path.is_dir() and os.access(path, os.W_OK | os.X_OK)
 
 
-def _source_origin(root_flag: bool, root: Path) -> str:
+def _source_origin(root_flag: bool) -> str:
     if root_flag:
         return "--root"
-    if os.environ.get(paths.SOURCE_VARIABLE, "").strip():
-        return paths.SOURCE_VARIABLE
-    cwd = Path.cwd().resolve()
-    if any((candidate / paths.CONFIG_NAME).is_file() for candidate in (cwd, *cwd.parents)):
-        return f"nearest {paths.CONFIG_NAME}"
-    return "current directory"
+    return paths.discover_source()[1]
 
 
 def collect(*, root_flag: bool, started_ms: float) -> tuple[dict, list[CliError]]:
@@ -44,6 +39,12 @@ def collect(*, root_flag: bool, started_ms: float) -> tuple[dict, list[CliError]
     if not root_ok:
         problems.append(CliError("msg-1001", param="root", path=root))
     config_file = root / paths.CONFIG_NAME
+    origin = _source_origin(root_flag)
+    remembered = paths.remembered_source()
+    if remembered is not None and not (remembered / paths.CONFIG_NAME).is_file():
+        problems.append(CliError("msg-1013", param="root", path=remembered))
+    if root_ok and origin == paths.ORIGIN_CURRENT and not config_file.is_file():
+        problems.append(CliError("msg-1009", param="root", path=root))
 
     config = None
     config_error = ""
@@ -79,7 +80,7 @@ def collect(*, root_flag: bool, started_ms: float) -> tuple[dict, list[CliError]
         "source_root": {
             "path": str(root),
             "exists": root_ok,
-            "resolved_from": _source_origin(root_flag, root),
+            "resolved_from": origin,
             "config_file": config_file.is_file(),
             "config_error": config_error,
         },

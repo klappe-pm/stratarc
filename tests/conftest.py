@@ -32,6 +32,25 @@ def no_engine_name_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("STRATARC_NAME", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def no_real_remembered_source(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Read and write the remembered source root only inside a test's temporary home, never the developer's real one."""
+    from stratarc import paths
+
+    base = tmp_path_factory.getbasetemp().resolve()
+    real = paths.remembered_config
+
+    def guarded() -> Path:
+        path = real()
+        try:
+            path.resolve().relative_to(base)
+        except ValueError:
+            return base / "no-remembered-source" / "config.toml"
+        return path
+
+    monkeypatch.setattr(paths, "remembered_config", guarded)
+
+
 @pytest.fixture
 def repo_root() -> Path:
     return REPO_ROOT

@@ -14,6 +14,15 @@ SOURCE_VARIABLE = "STRATARC_SOURCE"
 PROJECTS_VARIABLE = "STRATARC_PROJECTS_DIR"
 NAME_VARIABLE = "STRATARC_NAME"
 DEFAULT_NAME = "stratarc"
+# The machine state directory under the home; `stratarc.home_layout` owns its layout.
+STATE_DIRECTORY = ".stratarc"
+# The key in the home's config.toml that records the source root `stratarc setup` chose.
+REMEMBERED_KEY = "source_root"
+
+ORIGIN_ENVIRONMENT = SOURCE_VARIABLE
+ORIGIN_NEAREST = f"nearest {CONFIG_NAME}"
+ORIGIN_REMEMBERED = f"{STATE_DIRECTORY}/config.toml"
+ORIGIN_CURRENT = "current directory"
 
 
 def _env(name: str) -> str:
@@ -32,21 +41,54 @@ def home() -> Path:
     return Path.home()
 
 
-def source_root(explicit: Path | None = None) -> Path:
-    """The source root to read from.
+def remembered_config() -> Path:
+    """The home file `stratarc setup` records the chosen source root in: `<home>/.stratarc/config.toml`."""
+    return home() / STATE_DIRECTORY / "config.toml"
 
-    Precedence: the explicit argument, then `STRATARC_SOURCE`, then the nearest directory at or above the current directory that holds `stratarc.toml`, then the current directory.
+
+def remembered_source() -> Path | None:
+    """The source root `stratarc setup` recorded, as written; None when there is none or the file cannot be read.
+
+    The path is returned whether or not it still holds `stratarc.toml`, so `doctor` can report a dangling one. `source_root` uses it only when it does.
     """
-    if explicit is not None:
-        return Path(explicit).expanduser().resolve()
+    import tomllib
+
+    try:
+        data = tomllib.loads(remembered_config().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    value = data.get(REMEMBERED_KEY)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return Path(value).expanduser().resolve()
+
+
+def discover_source() -> tuple[Path, str]:
+    """The source root when no explicit one is given, and what decided it.
+
+    Precedence: `STRATARC_SOURCE`, then the nearest directory at or above the current directory that holds `stratarc.toml`, then the source root `stratarc setup` remembered when it still holds `stratarc.toml`, then the current directory. The second value is one of the `ORIGIN_` constants.
+    """
     value = _env(SOURCE_VARIABLE)
     if value:
-        return Path(value).expanduser().resolve()
+        return Path(value).expanduser().resolve(), ORIGIN_ENVIRONMENT
     cwd = Path.cwd().resolve()
     for candidate in (cwd, *cwd.parents):
         if (candidate / CONFIG_NAME).is_file():
-            return candidate
-    return cwd
+            return candidate, ORIGIN_NEAREST
+    remembered = remembered_source()
+    if remembered is not None and (remembered / CONFIG_NAME).is_file():
+        return remembered, ORIGIN_REMEMBERED
+    return cwd, ORIGIN_CURRENT
+
+
+def source_root(explicit: Path | None = None) -> Path:
+    """The source root to read from.
+
+    Precedence: the explicit argument, then `discover_source`: `STRATARC_SOURCE`, the nearest `stratarc.toml` at or above the current directory, the source root `stratarc setup` remembered, then the current directory.
+    """
+    if explicit is not None:
+        return Path(explicit).expanduser().resolve()
+    return discover_source()[0]
 
 
 def projects_root(explicit: Path | None = None, root: Path | None = None) -> Path:

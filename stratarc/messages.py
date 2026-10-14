@@ -74,6 +74,42 @@ _MESSAGES = (
         "The command {command} stopped unexpectedly: {detail}",
         "Run it again with --debug to see the traceback, and include it in an issue report.",
     ),
+    Message(
+        "msg-1009",
+        INVALID_INPUT,
+        "No stratarc.toml was found in {path} or any directory above it.",
+        "Run `stratarc` in a terminal to set up a source root, change into your source root, or pass --root.",
+    ),
+    Message(
+        "msg-1010",
+        INVALID_INPUT,
+        "{name} is not a stratarc command.{suggestion}",
+        "Run `stratarc help` to list every command.",
+    ),
+    Message(
+        "msg-1011",
+        INVALID_INPUT,
+        "No command was given.",
+        "Run `stratarc help` to list every command, or run `stratarc` in a terminal for guided setup.",
+    ),
+    Message(
+        "msg-1012",
+        INVALID_INPUT,
+        "Setup needs an interactive terminal, and this one is not.",
+        "Run `stratarc setup` in a terminal, or scaffold with `stratarc init DIR` and edit its stratarc.toml.",
+    ),
+    Message(
+        "msg-1013",
+        INVALID_INPUT,
+        "The remembered source root {path} no longer holds stratarc.toml.",
+        "Run `stratarc setup` to choose a source root again, or pass --root.",
+    ),
+    Message(
+        "msg-1014",
+        INVALID_INPUT,
+        "The arguments cannot be used: {detail}",
+        "Run `stratarc help {command}` to see what the command accepts.",
+    ),
     # 11xx: the failures the adapter commands, the deploy gate and the files in the home can hit.
     Message(
         "msg-1110",

@@ -3,9 +3,9 @@
 The reference graph (`stratarc.source_graph`) carries the reference checks: dangling agent, skill and command names, hook registrations that resolve to no file, rule paths named in prose that do not exist, the digest's common rule selector, and skill directories with no entry. This module does not reimplement any of that; it reuses the graph's `check` output. What it adds are the checks that are not references at all: an agent's declared tool names against the runtime's own vocabulary, every tool an agent or command body tells it to use against that declaration, a leading `paths:` line left over from an unfenced rule, the binding budget of every rule, the shape of `components.json`, rule tier membership and the runtimes named in `stratarc.toml`.
 
 Usage:
-    python -m stratarc.validate [--root PATH]            print every finding, exit 0
-    python -m stratarc.validate [--root PATH] --strict   exit 1 when any error level finding exists
-    python -m stratarc.validate --checks generic         run only the built in checks (see CHECKS)
+    stratarc validate [--root PATH]            print every finding, exit 0
+    stratarc validate [--root PATH] --strict   exit 1 when any error level finding exists
+    stratarc validate --checks generic         run only the built in checks (see CHECKS)
 
 Every check is either generic, built in and readable from any source root, or private, supplied by the source root itself. A source root adds private checks in `scripts/private/validate_checks.py`, a module that declares `VALIDATE_CHECKS`, a list of callables that each take the source root and return a list of findings (see `finding`). `--checks generic` runs the built in set only, `--checks private` runs only the module's, and `--checks all`, the default, runs both. A module that cannot be loaded, or a check that raises, is reported as an error finding and never loses the rest of the gate.
 """
@@ -413,7 +413,26 @@ def format_finding(item: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="stratarc validate", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        prog="stratarc validate",
+        description=(
+            "Check a source root for mistakes before you sync it: agent and command tool names,\n"
+            "references that point at nothing, rule length, tier membership, the shape of\n"
+            "components.json and the runtimes named in stratarc.toml. Run it after editing the\n"
+            "source and before `stratarc sync`; CI can run it with --strict as a gate.\n"
+            "\n"
+            "Every finding is printed as severity, check, path and message. Without --strict\n"
+            "the command reports and exits 0."
+        ),
+        epilog=(
+            "examples:\n"
+            "  stratarc validate                          report every finding, exit 0\n"
+            "  stratarc validate --strict                 exit 1 when any error is found\n"
+            "  stratarc validate --checks generic --root ~/agent-source\n"
+            "                                             run only the built in checks on another root"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--root", type=Path, default=None, help="source root (default: the resolved source root)")
     parser.add_argument("--strict", action="store_true", help="exit 1 when any error-level finding exists")
     parser.add_argument("--checks", choices=CHECK_SETS, default="all", help="which class of checks to run (default: all)")

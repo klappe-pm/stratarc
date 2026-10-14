@@ -66,10 +66,110 @@ def test_help_lists_every_command(capsys):
     assert "--projects-root" in out
 
 
-def test_unknown_command_exits_2():
-    with pytest.raises(SystemExit) as exc:
-        main(["frobnicate"])
-    assert exc.value.code == 2
+def test_unknown_command_exits_2(capsys):
+    assert main(["frobnicate"]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("error msg-1010  frobnicate is not a stratarc command.")
+    assert "Did you mean" not in err
+
+
+@pytest.mark.parametrize(("typo", "meant"), [("synk", "sync"), ("dif", "diff"), ("doctr", "doctor"), ("checks", "check"), ("valdate", "validate"), ("adaptor", "adapter")])
+def test_a_typo_suggests_the_closest_command(capsys, typo, meant):
+    assert main([typo]) == 2
+    assert f"Did you mean `stratarc {meant}`?" in capsys.readouterr().err
+
+
+def test_an_unknown_command_with_json_prints_one_envelope(capsys):
+    assert main(["--json", "synk"]) == 2
+    body = json.loads(capsys.readouterr().out)
+    assert body["ok"] is False
+    assert body["error"]["code"] == "msg-1010"
+
+
+def test_an_unknown_option_names_the_command_usage(capsys):
+    assert main(["sync", "--bogus"]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("usage: stratarc sync")
+    assert "error msg-1014  The arguments cannot be used: unrecognized arguments: --bogus" in err
+    assert "stratarc help sync" in err
+
+
+def test_a_usage_error_with_json_prints_one_envelope(capsys):
+    assert main(["--json", "init"]) == 2
+    captured = capsys.readouterr()
+    body = json.loads(captured.out)
+    assert body["error"]["code"] == "msg-1014"
+    assert "target" in body["error"]["message"]
+    assert captured.err == ""
+
+
+def test_an_unknown_global_flag_is_named(capsys):
+    assert main(["--bogus"]) == 2
+    assert "unrecognized arguments: --bogus" in capsys.readouterr().err
+
+
+def test_help_command_lists_and_explains(capsys):
+    assert main(["help"]) == 0
+    assert "start here:" in capsys.readouterr().out
+    assert main(["help", "sync"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("usage: stratarc sync")
+    assert "stratarc sync --dry-run" in out
+    assert main(["help", "validate"]) == 0
+    assert "stratarc validate" in capsys.readouterr().out
+    assert main(["help", "synk"]) == 2
+    assert "Did you mean `stratarc sync`?" in capsys.readouterr().err
+
+
+def test_bare_without_a_terminal_prints_help(capsys, monkeypatch):
+    monkeypatch.setattr(cli, "_interactive", lambda: False)
+    assert main([]) == 0
+    assert "start here:" in capsys.readouterr().out
+
+
+def test_bare_with_json_is_invalid_input(capsys):
+    assert main(["--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == "msg-1011"
+
+
+def test_bare_in_a_terminal_without_a_source_root_starts_setup(monkeypatch, tmp_path, stratarc_home):
+    monkeypatch.delenv("STRATARC_SOURCE", raising=False)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "_interactive", lambda: True)
+    started = []
+    monkeypatch.setattr("stratarc.setup.run", lambda: started.append(True) or 0)
+    assert main([]) == 0
+    assert started == [True]
+
+
+def test_bare_in_a_terminal_with_a_source_root_prints_status(monkeypatch, capsys, tmp_path, stratarc_home):
+    root = tmp_path / "src"
+    assert main(["init", str(root)]) == 0
+    capsys.readouterr()
+    monkeypatch.chdir(root)
+    monkeypatch.delenv("STRATARC_SOURCE", raising=False)
+    monkeypatch.setattr(cli, "_interactive", lambda: True)
+    monkeypatch.setattr("stratarc.setup.run", lambda: pytest.fail("setup must not start"))
+    assert main([]) == 0
+    out = capsys.readouterr().out
+    assert f"source root   {root.resolve()}" in out or "source root   ~/" in out
+    assert "stratarc sync" in out
+
+
+def test_setup_without_a_terminal_is_refused(capsys, monkeypatch):
+    monkeypatch.setattr(cli, "_interactive", lambda: False)
+    assert main(["setup"]) == 2
+    assert capsys.readouterr().err.startswith("error msg-1012")
+
+
+def test_an_engine_command_outside_a_source_root_is_refused(monkeypatch, capsys, tmp_path, stratarc_home):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.chdir(empty)
+    monkeypatch.delenv("STRATARC_SOURCE", raising=False)
+    assert main(["sync"]) == 2
+    assert capsys.readouterr().err.startswith("error msg-1009")
+    assert list(empty.iterdir()) == []
 
 
 def test_python_dash_m_entry(tmp_path: Path):

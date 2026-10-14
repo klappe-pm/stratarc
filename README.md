@@ -130,9 +130,14 @@ A complete worked example lives in [examples/notes-cli](https://github.com/klapp
 | `stratarc sync` | Renders the source root into the enabled runtimes and managed projects. |
 | `stratarc prune` | Removes files a runtime holds that the source no longer produces. |
 | `stratarc reconcile` | Refreshes `control-plane.md`, the table that records which item reaches which scope. |
+| `stratarc projects` | Delivers each project's configuration from `projects-root/` into its checkout. `sync` runs it for you. |
+| `stratarc gen-rules-digest` | Renders the rules digest, or embeds and checks it inside hand-authored instruction files. |
+| `stratarc components` | Validates `components.json` and, with `--list`, prints what it declares. |
 | `stratarc adapter` | Lists the adapters, and writes the starting point for a runtime of your own. |
 
-Every command accepts `--help` and `--json`. The [CLI reference](https://github.com/klappe-pm/stratarc/blob/main/docs/reference/cli.md) covers the full surface, including exit statuses and the JSON envelope.
+Running `stratarc` with no arguments starts a guided setup the first time; after that it shows the status of the install and the commands to run next. `stratarc help COMMAND` shows one command's help, the same as `stratarc COMMAND --help`.
+
+Every command accepts `--help` and `--json`. The [CLI reference](https://github.com/klappe-pm/stratarc/blob/main/docs/reference/cli.md) covers the full surface, including exit statuses and the JSON envelope, and the [command reference](https://github.com/klappe-pm/stratarc/blob/main/docs/reference/generated/commands.md) lists every command and option, generated from the parser.
 
 ## Documentation
 

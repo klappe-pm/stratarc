@@ -1800,10 +1800,42 @@ def opt_in(path: pathlib.Path, column: str, options: list[str]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="stratarc projects")
-    ap.add_argument("--check", action="store_true")
-    ap.add_argument("--only")
-    ap.add_argument("--adopt", metavar="NAME")
+    ap = argparse.ArgumentParser(
+        prog="stratarc projects",
+        description=(
+            "Deliver each project's configuration from projects-root/<name>/ in the source root\n"
+            "into that project's checkout under the projects root: its instruction files, rules,\n"
+            "hooks, agents, commands, scripts and skills, in each runtime's project layout.\n"
+            "Only active projects receive config; a checkout under inactive/, archived/ or\n"
+            "external/, or one named in projects-root/public-targets.json, is skipped.\n"
+            "`stratarc sync` runs this for you; run it directly to deliver one project or to\n"
+            "preview a delivery."
+        ),
+        epilog=(
+            "examples:\n"
+            "  stratarc projects                       deliver every project\n"
+            "  stratarc projects --check               show what would change, exit 1 if stale\n"
+            "  stratarc projects --only my-project     deliver one project\n"
+            "  stratarc projects --adopt my-project    capture an existing checkout's config\n"
+            "                                          into projects-root/my-project/"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="dry run: print what each project would receive, write nothing, exit 1 if any project is stale",
+    )
+    ap.add_argument(
+        "--only",
+        metavar="NAME",
+        help="deliver only NAME, the name of its directory under projects-root, instead of every project",
+    )
+    ap.add_argument(
+        "--adopt",
+        metavar="NAME",
+        help="first time capture: copy project NAME's existing checkout config into projects-root/NAME/, then exit",
+    )
     ap.add_argument(
         "--verify",
         action="store_true",
