@@ -64,7 +64,7 @@ With `--json` a command prints exactly one object on standard output and exits w
 
 ## Mistyped Commands and Arguments
 
-An unknown command is refused with `msg-1010`, which names the closest command when one is near (`stratarc synk` suggests `stratarc sync`). An argument a command does not take is refused with `msg-1014`, after that command's own usage line, and its recovery names `stratarc help COMMAND`. Both exit 2, and with `--json` both print one envelope like any other refusal.
+An unknown command is refused with `msg-1010`, which names the closest command when one is near (`stratarc synk` suggests `stratarc sync`). An argument a command does not take is refused with `msg-1014`, after that command's own usage line, and its recovery names `stratarc help COMMAND`. The arguments are checked before the source root is looked for, so a mistyped option is reported as such in any directory. Both exit 2, and with `--json` both print one envelope like any other refusal.
 
 ## Exit Statuses
 

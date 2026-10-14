@@ -1799,7 +1799,8 @@ def opt_in(path: pathlib.Path, column: str, options: list[str]) -> list[str]:
     return changed
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The command's parser; `stratarc` checks a command line against it before it looks for a source root."""
     ap = argparse.ArgumentParser(
         prog="stratarc projects",
         description=(
@@ -1847,7 +1848,11 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PATH",
         help=f"the source root to deliver from (default: ${SOURCE_VARIABLE}, then the nearest {paths.CONFIG_NAME}, then the current directory)",
     )
-    args = ap.parse_args(argv)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     # --root wins; otherwise a root a caller already pinned with
     # configure_root stays, and a first run resolves it now rather than from
     # the import-time default.

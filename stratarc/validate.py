@@ -412,7 +412,8 @@ def format_finding(item: dict) -> str:
     return f"{item['severity']:<7} {item['check']:<26} {item['path']}: {item['message']}"
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The command's parser; `stratarc` checks a command line against it before it looks for a source root."""
     parser = argparse.ArgumentParser(
         prog="stratarc validate",
         description=(
@@ -436,7 +437,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", type=Path, default=None, help="source root (default: the resolved source root)")
     parser.add_argument("--strict", action="store_true", help="exit 1 when any error-level finding exists")
     parser.add_argument("--checks", choices=CHECK_SETS, default="all", help="which class of checks to run (default: all)")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
 
     root = source_root(args.root)
     with bound_source(root):
