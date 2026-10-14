@@ -34,6 +34,16 @@ python3 -m pytest -m 'not slow'
 
 Keep each pull request to one change, describe what it does and how you tested it, and make sure the test suite passes. Add a line under Unreleased in [CHANGELOG.md](CHANGELOG.md) for any user-visible change. A change that affects a decision recorded under [docs/explanation/decisions](docs/explanation/decisions/README.md) should add a record that amends or replaces it.
 
+## Roadmap
+
+Open an issue before starting on one of these, so the approach can be agreed first.
+
+- [ ] Add runtime adapters for more agents
+- [ ] VS Code extension for visual editing
+- [ ] Configuration migration wizard
+- [ ] Web UI for non-CLI users
+- [ ] Team collaboration features
+
 ## License
 
 By contributing, you agree that your contributions are licensed under the MIT license in [LICENSE](LICENSE).
