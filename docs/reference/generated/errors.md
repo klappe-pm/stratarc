@@ -63,7 +63,7 @@ Ends the command with status 2 (invalid-input).
 
 Problem: The configuration cannot be used: {detail}
 
-Recovery: Fix stratarc.toml in the source root, or remove it to use the defaults.
+Recovery: Fix stratarc.toml in the source root; an empty file uses the defaults.
 
 ### `msg-1003`
 
@@ -159,7 +159,7 @@ Ends the command with status 2 (invalid-input).
 
 Problem: The arguments cannot be used: {detail}
 
-Recovery: Run `stratarc help {command}` to see what the command accepts.
+Recovery: Run `{help}` to see what the command accepts.
 
 ### `msg-1110`
 

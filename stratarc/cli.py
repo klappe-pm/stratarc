@@ -204,12 +204,12 @@ def _home_start(flags: argparse.Namespace) -> tuple[int, dict]:
     if not _interactive():
         build_parser().print_help()
         return 0, {}
-    if flags.root:
-        root, origin = paths.source_root(), "--root"
-    else:
-        root, origin = paths.discover_source()
-    if (root / paths.CONFIG_NAME).is_file():
-        return 0, {"text": setup.status(root, origin)}
+    root, origin = paths.discover_source()
+    if origin != paths.ORIGIN_CURRENT or (root / paths.CONFIG_NAME).is_file():
+        # A root named by --root or STRATARC_SOURCE is used as given, the way every engine command uses it, so a stale one never sends the user back into setup.
+        if not root.is_dir():
+            raise CliError("msg-1001", param="root", path=root)
+        return 0, {"text": setup.status(root, "--root" if flags.root else origin)}
     return setup.run(), {}
 
 
@@ -625,8 +625,9 @@ def main(argv: list[str] | None = None) -> int:
     except _UsageError as usage:
         if not flags.json:
             usage.parser.print_usage(sys.stderr)
-        name = args.command or "COMMAND"
-        return _finish(args, flags, 2, {}, CliError("msg-1014", param=name, detail=usage.message, command=name))
+        name = args.command if args.command and not args.command.startswith("-") else None
+        guide = f"stratarc help {name}" if name else "stratarc help"
+        return _finish(args, flags, 2, {}, CliError("msg-1014", param=name or "option", detail=usage.message, help=guide))
 
     try:
         with _environment(_flag_environment(flags)):

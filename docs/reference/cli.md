@@ -4,7 +4,7 @@ This page describes how the `stratarc` command behaves as a whole: how it finds 
 
 ## Running Stratarc with No Command
 
-`stratarc` on its own adapts to where it runs. In a terminal with no source root found, it starts `stratarc setup`. In a terminal with a source root found, it prints where the source root is, which runtimes are enabled and the commands to run next, and exits 0. Outside a terminal it prints the help and exits 0, so a script never waits on a prompt. With `--json` it is invalid input (`msg-1011`) and exits 2.
+`stratarc` on its own adapts to where it runs. In a terminal with no source root found, it starts `stratarc setup`. In a terminal with a source root found, it prints where the source root is, which runtimes are enabled and the commands to run next, and exits 0. A root named by `--root` or `STRATARC_SOURCE` is used as given and never starts setup; one that does not exist is refused with `msg-1001`. Outside a terminal it prints the help and exits 0, so a script never waits on a prompt. With `--json` it is invalid input (`msg-1011`) and exits 2.
 
 ## Commands
 

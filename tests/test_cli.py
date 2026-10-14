@@ -105,7 +105,22 @@ def test_a_usage_error_with_json_prints_one_envelope(capsys):
 
 def test_an_unknown_global_flag_is_named(capsys):
     assert main(["--bogus"]) == 2
-    assert "unrecognized arguments: --bogus" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "unrecognized arguments: --bogus" in err
+    assert "Run `stratarc help` to see what the command accepts." in err
+
+
+def test_bare_with_a_stale_source_variable_reports_it_instead_of_starting_setup(monkeypatch, capsys, tmp_path, stratarc_home):
+    monkeypatch.setattr(cli, "_interactive", lambda: True)
+    monkeypatch.setattr("stratarc.setup.run", lambda: pytest.fail("setup must not start"))
+    monkeypatch.setenv("STRATARC_SOURCE", str(tmp_path / "gone"))
+    assert main([]) == 2
+    assert capsys.readouterr().err.startswith("error msg-1001")
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    monkeypatch.setenv("STRATARC_SOURCE", str(bare))
+    assert main([]) == 0
+    assert "source root" in capsys.readouterr().out
 
 
 def test_help_command_lists_and_explains(capsys):

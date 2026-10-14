@@ -36,7 +36,7 @@ _MESSAGES = (
         "msg-1002",
         INVALID_INPUT,
         "The configuration cannot be used: {detail}",
-        "Fix stratarc.toml in the source root, or remove it to use the defaults.",
+        "Fix stratarc.toml in the source root; an empty file uses the defaults.",
     ),
     Message(
         "msg-1003",
@@ -108,7 +108,7 @@ _MESSAGES = (
         "msg-1014",
         INVALID_INPUT,
         "The arguments cannot be used: {detail}",
-        "Run `stratarc help {command}` to see what the command accepts.",
+        "Run `{help}` to see what the command accepts.",
     ),
     # 11xx: the failures the adapter commands, the deploy gate and the files in the home can hit.
     Message(

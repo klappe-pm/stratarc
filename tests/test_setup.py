@@ -58,6 +58,18 @@ def test_setup_deploys_only_on_yes(home: Path):
     assert (home / ".claude" / "CLAUDE.md").is_file()
 
 
+def test_setup_warns_about_existing_files_and_backs_up_what_it_replaces(home: Path):
+    claude = home / ".claude"
+    (claude / "CLAUDE.md").write_text("my own instructions\n", encoding="utf-8")
+    (claude / ".other-deploy.json").write_text("{}\n", encoding="utf-8")
+    out: list[str] = []
+    assert setup.run(ask=scripted(str(home / "src"), "claude", "y"), say=out.append) == 0
+    assert any("already hold configuration stratarc did not write: claude" in line for line in out)
+    assert (claude / "CLAUDE.md").read_text(encoding="utf-8") != "my own instructions\n"
+    backups = list((home / ".stratarc" / "backups").rglob("*"))
+    assert any(path.is_file() and path.read_text(encoding="utf-8") == "my own instructions\n" for path in backups)
+
+
 def test_setup_asks_again_for_a_non_empty_directory_and_an_unknown_runtime(home: Path):
     taken = home / "taken"
     taken.mkdir()

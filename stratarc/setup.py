@@ -159,14 +159,16 @@ def _choose_runtimes(root: Path, ask: Ask, say: Say) -> set[str]:
 
 
 def _occupied(root: Path, enabled: set[str]) -> list[str]:
-    """The enabled runtime targets that already hold files stratarc has not deployed."""
+    """The enabled runtime targets that already hold files and carry no deploy stamp from this source's engine."""
+    from stratarc.deploy_guard import stamp_name
     from stratarc.sync import load_runtimes
 
+    stamp = stamp_name(root)
     occupied = []
     for name, (_module, target) in sorted(load_runtimes(root=root).items()):
         if name not in enabled or not target.is_dir():
             continue
-        if any(target.iterdir()) and not any(target.glob(".*-deploy.json")):
+        if any(target.iterdir()) and not (target / stamp).is_file():
             occupied.append(f"{name} ({_display(target)})")
     return occupied
 
@@ -241,7 +243,9 @@ def _run(ask: Ask, say: Say, written: list[str]) -> int:
     if occupied:
         say("")
         say(f"These runtimes already hold configuration stratarc did not write: {', '.join(occupied)}.")
-        say(f"A deploy writes only the files the preview lists and leaves everything else in those directories alone. To bring your existing configuration into the source first, see {DOCS}/how-to-guides/migrate-existing-config.md")
+        say("A deploy replaces each file the preview lists, including one you wrote by hand, and leaves every other file alone.")
+        say(f"Setup copies each file it replaces into {_display(paths.home() / paths.STATE_DIRECTORY / 'backups')} first; {DOCS}/how-to-guides/roll-back-a-deploy.md explains restoring one.")
+        say(f"To bring your existing configuration into the source before deploying, answer n and follow {DOCS}/how-to-guides/migrate-existing-config.md")
     say("")
     if not _yes(ask("Deploy now? [y/N] ")):
         say("Not deployed. Run `stratarc sync` when you are ready.")
@@ -250,7 +254,8 @@ def _run(ask: Ask, say: Say, written: list[str]) -> int:
     from stratarc.cli import _require_writable_home
 
     _require_writable_home()
-    code = sync.main(root_args)
+    # Verified with rollback, so every file the first deploy replaces is backed up in the home before it is written.
+    code = sync.main([*root_args, "--verify", "--rollback-on-drift"])
     if code not in (0, None):
         say(f"The deploy did not finish (exit {code}). See {DOCS}/how-to-guides/troubleshooting.md")
         return code
