@@ -287,11 +287,22 @@ def _check_passthrough_usage(command: str, argv: list[str]) -> None:
 
     if any(flag in argv for flag in ("-h", "--help")):
         return
-    parser = importlib.import_module(f"stratarc.{command.replace('-', '_')}").build_parser()
+    module = importlib.import_module(f"stratarc.{command.replace('-', '_')}")
+    parser = module.build_parser()
 
     def error(message: str):
         raise _UsageError(parser, message)
 
+    # argparse reports a missing required argument before an unknown one, so a first pass with nothing required finds the unknown one.
+    loose = module.build_parser()
+    loose.error = error  # type: ignore[method-assign]
+    for action in loose._actions:
+        action.required = False
+    for group in loose._mutually_exclusive_groups:
+        group.required = False
+    _, extras = loose.parse_known_args(argv)
+    if extras:
+        error(f"unrecognized arguments: {' '.join(extras)}")
     parser.error = error  # type: ignore[method-assign]
     parser.parse_args(argv)
 
