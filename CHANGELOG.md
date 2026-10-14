@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+### Changed
+
+- Before asking to deploy, setup names the project checkouts the deploy writes into, since it replaces files such as `AGENTS.md` and `CLAUDE.md` in each.
+
 ### Fixed
 
 - Setup no longer writes into project checkouts before you answer the deploy prompt. In 0.3.0 it wrote `.docs/stratarc-control-plane.md` into every git checkout under the projects root's `active/` folder even when you answered `n`. It now refreshes only the source root's `control-plane.md`, and the snapshots are written by the deploy.

@@ -69,6 +69,23 @@ def test_declining_the_deploy_leaves_project_checkouts_untouched(home: Path, mon
     assert [path.name for path in demo.iterdir()] == [".git"]
 
 
+def test_setup_warns_that_a_deploy_writes_into_project_checkouts(home: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("STRATARC_PROJECTS_DIR", raising=False)
+    for name in ("alpha", "beta"):
+        checkout = home / "projects" / "active" / name
+        checkout.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+    out: list[str] = []
+    assert setup.run(ask=scripted(str(home / "src"), "claude", "n"), say=out.append) == 0
+    assert any("also writes into 2 project checkouts: alpha, beta" in line for line in out)
+
+
+def test_setup_names_no_projects_when_there_are_none(home: Path):
+    out: list[str] = []
+    assert setup.run(ask=scripted(str(home / "src"), "claude", "n"), say=out.append) == 0
+    assert not any("project checkout" in line for line in out)
+
+
 def test_setup_warns_about_existing_files_and_backs_up_what_it_replaces(home: Path):
     claude = home / ".claude"
     (claude / "CLAUDE.md").write_text("my own instructions\n", encoding="utf-8")

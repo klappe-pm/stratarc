@@ -173,6 +173,18 @@ def _occupied(root: Path, enabled: set[str]) -> list[str]:
     return occupied
 
 
+def _project_checkouts(root: Path) -> list[str]:
+    """The active project checkouts a deploy from root writes into."""
+    from stratarc import reconcile
+
+    previous = reconcile._root_flag
+    reconcile.configure_root(root)
+    try:
+        return sorted(reconcile.active_checkout_paths())
+    finally:
+        reconcile._root_flag = previous
+
+
 def _next_steps(say: Say) -> None:
     say("")
     say("Next:")
@@ -247,6 +259,12 @@ def _run(ask: Ask, say: Say, written: list[str]) -> int:
         say("A deploy replaces each file the preview lists, including one you wrote by hand, and leaves every other file alone.")
         say(f"Setup copies each file it replaces into {_display(paths.home() / paths.STATE_DIRECTORY / 'backups')} first; {DOCS}/how-to-guides/roll-back-a-deploy.md explains restoring one.")
         say(f"To bring your existing configuration into the source before deploying, answer n and follow {DOCS}/how-to-guides/migrate-existing-config.md")
+    checkouts = _project_checkouts(root)
+    if checkouts:
+        say("")
+        noun = "project checkout" if len(checkouts) == 1 else "project checkouts"
+        say(f"A deploy also writes into {len(checkouts)} {noun}: {', '.join(checkouts)}.")
+        say("It replaces each file the preview lists under projects, such as AGENTS.md and CLAUDE.md, in every one of them.")
     say("")
     if not _yes(ask("Deploy now? [y/N] ")):
         say("Not deployed. Run `stratarc sync` when you are ready.")
