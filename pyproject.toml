@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
@@ -28,7 +28,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest", "jsonschema"]
+test = ["pytest>=9.0.3", "jsonschema"]
 
 [project.scripts]
 stratarc = "stratarc.cli:main"
@@ -49,7 +49,7 @@ packages = ["stratarc"]
 artifacts = ["stratarc/data/**"]
 
 [tool.hatch.build.targets.sdist]
-include = ["stratarc", "tests", "examples", "README.md", "LICENSE", "pyproject.toml"]
+include = ["stratarc", "tests", "examples", "requirements", "README.md", "LICENSE", "pyproject.toml"]
 artifacts = ["stratarc/data/**"]
 
 [tool.pytest.ini_options]

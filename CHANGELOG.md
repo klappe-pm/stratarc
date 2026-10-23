@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+### Changed
+
+- Releases publish through PyPI trusted publishing from a tag-triggered workflow, `.github/workflows/release.yml`, with every action pinned to a commit and every tool installed from a hash pinned lock file. No PyPI token is used. The cut-a-release guide describes the one-time setup.
+- The test extra requires pytest 9.0.3 or newer, since earlier releases carry CVE-2025-71176, and the build backend is pinned to hatchling 1.27 or newer, below 2.
+
 ## 0.3.1 - 2026-10-14
 
 ### Changed
