@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 from stratarc.control_plane import ControlPlane
@@ -158,6 +159,20 @@ def _extract_binding_section(text: str) -> str:
             break
         binding_lines.append(line)
     return "\n".join(binding_lines).strip("\n")
+
+
+def _rebase_links(text: str, pointer_prefix: str) -> str:
+    """Rewrite ``](../x)`` links, written relative to a rule file, to resolve from the document that embeds the digest.
+
+    A rule under ``rules/`` links a sibling tree as ``../skills/x``; the embedding document sits one level up, so the digest drops one ``../`` per segment of ``pointer_prefix``.
+    """
+    depth = len([part for part in pointer_prefix.split("/") if part])
+
+    def rebase(match: re.Match) -> str:
+        ups = match.group(1).count("../")
+        return "](" + "../" * max(ups - depth, 0)
+
+    return re.sub(r"\]\(((?:\.\./)+)", rebase, text)
 
 
 def _render_rule_body(text: str) -> str:
@@ -321,11 +336,11 @@ def build_rules_digest(
             text = render_source(text, source_root)
         binding = _extract_binding_section(text)
         if binding:
-            parts.append(binding)
+            parts.append(_rebase_links(binding, pointer_prefix))
             parts.append("")
             parts.append(f"Full rule: `{pointer_prefix}{path.name}`")
         else:
-            parts.append(_render_rule_body(text))
+            parts.append(_rebase_links(_render_rule_body(text), pointer_prefix))
         parts.append("")
     parts.append(DIGEST_END)
     return "\n".join(parts)

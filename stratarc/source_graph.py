@@ -552,11 +552,16 @@ class Graph:
             return
         base = rel.rsplit("/", 1)[0] if "/" in rel else ""
         in_fence = False
+        in_digest = False
         for number, line in enumerate(self.lines(rel), 1):
             evidence = f"{rel}:{number}"
             if line.strip().startswith("```"):
                 in_fence = not in_fence
-            if node_id == "AGENTS.md":
+            if line.startswith("<!-- BEGIN RULES-DIGEST"):
+                in_digest = True
+            elif line.startswith("<!-- END RULES-DIGEST"):
+                in_digest = False
+            if node_id == "AGENTS.md" and in_digest:
                 heading = DIGEST_HEADING.match(line)
                 if heading:
                     self.capability(node_id, heading.group(1), "rule", evidence)

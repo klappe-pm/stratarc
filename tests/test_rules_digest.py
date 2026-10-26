@@ -16,6 +16,7 @@ from stratarc.rules_digest import (
     DIGEST_SOURCE_ENV_VAR,
     SOURCE_TOKEN,
     _extract_binding_section,
+    _rebase_links,
     build_rules_digest,
     digest_or_note,
     embed_digest,
@@ -373,3 +374,8 @@ class TestDefaultRulesRoot:
 
     def test_an_empty_source_root_has_nothing_to_render(self, source_root):
         assert build_rules_digest() is None
+
+
+def test_rebase_links_drops_one_up_step_per_prefix_segment():
+    text = "See [a](../skills/a/SKILL.md) and [b](notes.md) and [c](../../x.md)."
+    assert _rebase_links(text, "rules/") == "See [a](skills/a/SKILL.md) and [b](notes.md) and [c](../x.md)."
