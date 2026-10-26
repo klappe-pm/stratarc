@@ -117,7 +117,7 @@ def source_root(flag: str | None = None, default: pathlib.Path | None = None) ->
 
 _ROOT_CONFIGURED = False
 ROOT = source_root()
-PROJECTS_SRC = ROOT / "projects-root"
+PROJECTS_SRC = paths.project_config_dir(ROOT)
 RETIRED_RULES = ROOT / "rules" / "retired.json"
 RETIRED_HOOKS = ROOT / "hooks" / "retired.json"
 # Projects that are public repositories receiving nothing from this one; the
@@ -147,7 +147,7 @@ def configure_root(root: pathlib.Path) -> None:
     global ROOT, PROJECTS_SRC, RETIRED_RULES, RETIRED_HOOKS, _ROOT_CONFIGURED
     _ROOT_CONFIGURED = True
     ROOT = pathlib.Path(root).expanduser().resolve()
-    PROJECTS_SRC = ROOT / "projects-root"
+    PROJECTS_SRC = paths.project_config_dir(ROOT)
     RETIRED_RULES = ROOT / "rules" / "retired.json"
     RETIRED_HOOKS = ROOT / "hooks" / "retired.json"
 
@@ -222,7 +222,7 @@ def _is_source_tree(path: pathlib.Path) -> bool:
     """
     if (path / paths.CONFIG_NAME).is_file():
         return True
-    return (path / "control-plane.md").is_file() and (path / "projects-root").is_dir()
+    return paths.control_plane_file(path).is_file() and paths.project_config_dir(path).is_dir()
 
 
 def _refuse_canonical(
@@ -1090,7 +1090,7 @@ def _embed_project_digest(body: bytes, name: str) -> bytes:
     digest = digest_or_note(
         ROOT / "rules",
         column=name,
-        control_plane_path=ROOT / "control-plane.md",
+        control_plane_path=paths.control_plane_file(ROOT),
         source_root=ROOT,
     )
     return embed_digest(text, digest).encode("utf-8")
@@ -1869,7 +1869,7 @@ def main(argv: list[str] | None = None) -> int:
         code = reconcile_main(["--root", str(ROOT)] + (["--check"] if (args.check or args.verify) else []))
         if code:
             return code
-    cp = ControlPlane.load(ROOT / "control-plane.md")
+    cp = ControlPlane.load(paths.control_plane_file(ROOT))
     try:
         public_targets()
     except RuntimeError as error:

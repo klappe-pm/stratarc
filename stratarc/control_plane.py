@@ -28,7 +28,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 
-from stratarc.paths import projects_dir, source_root
+from stratarc.paths import control_plane_file, projects_dir, source_root
 
 CONTROL_PLANE_NAME = "control-plane.md"
 
@@ -143,7 +143,7 @@ class ControlPlane:
     def load(cls, path: pathlib.Path | None = None) -> "ControlPlane":
         """Parse *path*, or `<source root>/control-plane.md` when omitted."""
         if path is None:
-            path = source_root() / CONTROL_PLANE_NAME
+            path = control_plane_file()
         cp = cls(path=path)
         if not path.exists():
             return cp

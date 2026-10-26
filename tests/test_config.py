@@ -96,3 +96,24 @@ def test_malformed_file_names_the_path(tmp_path, text):
     with pytest.raises(ConfigError) as caught:
         load_config(tmp_path)
     assert str(tmp_path / "stratarc.toml") in str(caught.value)
+
+
+def test_layout_defaults_and_overrides(tmp_path):
+    from stratarc.config import load_config
+
+    assert load_config(tmp_path).layout.project_config_dir == "projects-root"
+    (tmp_path / "stratarc.toml").write_text(
+        '[layout]\nproject_config_dir = "projects/roots"\ncontrol_plane = "projects/roots/control-plane.md"\nlocal_dir = "local"\ncontrol_plane_managed = false\n',
+        encoding="utf-8",
+    )
+    layout = load_config(tmp_path).layout
+    assert (layout.project_config_dir, layout.local_dir, layout.control_plane_managed) == ("projects/roots", "local", False)
+
+
+@pytest.mark.parametrize("value", ["/abs", "../up", "a//b", "a/./b", ""])
+def test_layout_rejects_paths_outside_the_root(tmp_path, value):
+    from stratarc.config import ConfigError, load_config
+
+    (tmp_path / "stratarc.toml").write_text(f'[layout]\nlocal_dir = "{value}"\n', encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(tmp_path)

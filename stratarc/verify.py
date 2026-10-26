@@ -13,6 +13,8 @@ Scopes: `all`; `project:<name>`, one project and no runtimes; `change:<id>`, the
 
 from __future__ import annotations
 
+from stratarc.paths import control_plane_file, project_config_dir
+
 import contextlib
 import dataclasses
 import datetime as _dt
@@ -110,7 +112,7 @@ def _live_runtimes(root: Path) -> dict[str, tuple[str, Path]]:
     runtimes = sync.load_runtimes(root=root)
     disabled = {name for name, runtime in load_config(root).runtimes.items() if not runtime.enabled}
     live = {name: value for name, value in sync.detected(runtimes).items() if name not in disabled}
-    cp = ControlPlane.load(root / "control-plane.md")
+    cp = ControlPlane.load(control_plane_file(root))
     if cp.rows:
         live = {name: value for name, value in live.items() if cp.enabled("global", f"runtime:{name}")}
     return live
@@ -210,7 +212,7 @@ def _entry(area: str, name: str, file: str, status: str, before: str = "", after
 def _project_names(root: Path, cp) -> list[str]:
     if cp.rows:
         return list(cp.projects())
-    source = root / "projects-root"
+    source = project_config_dir(root)
     return sorted(p.name for p in source.iterdir() if p.is_dir()) if source.is_dir() else []
 
 
@@ -223,7 +225,7 @@ def _compare_projects(root: Path, names: list[str], notes: list[str]) -> list[di
     entries: list[dict] = []
     projects.configure_root(root)
     try:
-        cp = ControlPlane.load(root / "control-plane.md")
+        cp = ControlPlane.load(control_plane_file(root))
         known = _project_names(root, cp)
         for name in names or known:
             if name not in known:
@@ -284,7 +286,7 @@ def run(scope: str = "all", *, root: Path | None = None, record: bool = True, ac
 
     with bound_source(root):
         if include_runtimes:
-            cp = ControlPlane.load(root / "control-plane.md")
+            cp = ControlPlane.load(control_plane_file(root))
             live = _live_runtimes(root)
             if live:
                 stage, stage_notes = build_stage(root, cp, "global")

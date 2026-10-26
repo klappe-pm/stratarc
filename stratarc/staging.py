@@ -39,6 +39,8 @@ _binding_only), pointing at the full text in the canonical source tree.
 
 from __future__ import annotations
 
+from stratarc.paths import project_config_dir
+
 import json
 import pathlib
 import shutil
@@ -402,7 +404,7 @@ def build_stage(
     notes = _stage_shared(root, cp, col, stage, prefix)
 
     if col != "global":
-        proj = root / "projects-root" / col
+        proj = project_config_dir(root) / col
         if proj.is_dir():
             if cp.enabled(col, "project:AGENTS.md") and (proj / "AGENTS.md").exists():
                 _stage_rendered(proj / "AGENTS.md", stage / "AGENTS.md", root)

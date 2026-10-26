@@ -41,6 +41,8 @@ Three properties hold throughout:
 
 from __future__ import annotations
 
+from stratarc.paths import control_plane_file, project_config_dir
+
 import argparse
 import datetime
 import json
@@ -196,7 +198,7 @@ def _is_source_tree(path: pathlib.Path) -> bool:
     """True when *path* is itself an engine source tree, by content."""
     if (path / paths.CONFIG_NAME).is_file():
         return True
-    return (path / "control-plane.md").is_file() and (path / "projects-root").is_dir()
+    return control_plane_file(path).is_file() and project_config_dir(path).is_dir()
 
 
 def _checkout_for(name: str, cp: ControlPlane, root: pathlib.Path, public: frozenset[str], base: pathlib.Path):
@@ -254,7 +256,7 @@ def scan(
     claude = claude or claude_home()
     today = today or datetime.date.today()
     manifest = root / "components.json"
-    control_plane = root / "control-plane.md"
+    control_plane = control_plane_file(root)
     if not manifest.is_file() or not control_plane.is_file():
         return plan
     components = _read_object(manifest)
@@ -477,7 +479,7 @@ def opt_in(root: pathlib.Path, plan: Plan) -> list[str]:
     cells set.
     """
     notes: list[str] = []
-    path = root / "control-plane.md"
+    path = control_plane_file(root)
     for candidate in plan.candidates:
         for project in candidate.projects:
             try:

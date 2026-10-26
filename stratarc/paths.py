@@ -131,3 +131,26 @@ def engine_name(root: Path | None = None) -> str:
         return value
     return load_config(source_root(root)).name
 
+
+
+def project_config_dir(root: Path | None = None) -> Path:
+    """The directory under the source root that holds each project's own configuration (`layout.project_config_dir`)."""
+    from stratarc.config import load_config
+
+    base = source_root(root)
+    return base / load_config(base).layout.project_config_dir
+
+
+def control_plane_file(root: Path | None = None) -> Path:
+    """The control plane file under the source root (`layout.control_plane`)."""
+    from stratarc.config import load_config
+
+    base = source_root(root)
+    return base / load_config(base).layout.control_plane
+
+
+def local_dir_name(root: Path | None = None) -> str:
+    """The folder name inside a project that holds internal work product (`layout.local_dir`)."""
+    from stratarc.config import load_config
+
+    return load_config(source_root(root)).layout.local_dir

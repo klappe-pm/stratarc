@@ -1,6 +1,6 @@
 """Reads `stratarc.toml` from a source root.
 
-The file holds four things: a `[runtimes.<name>]` table per runtime with `enabled` and `target`, a `projects_root` directory, the engine `name` (default `stratarc`) and `[validate] gate_private` (default false). A missing file yields the defaults; a malformed one raises `ConfigError` naming the file.
+The file holds five things: a `[runtimes.<name>]` table per runtime with `enabled` and `target`, a `projects_root` directory, the engine `name` (default `stratarc`), `[validate] gate_private` (default false) and a `[layout]` table naming where the source root keeps its project configuration (`project_config_dir`, default `projects-root`), its control plane (`control_plane`, default `control-plane.md`) and where a project keeps internal work product (`local_dir`, default `.docs`). Layout values are relative paths inside their root. `control_plane_managed = false` marks the control plane as hand maintained, and reconcile then leaves it and the project snapshots alone. A missing file yields the defaults; a malformed one raises `ConfigError` naming the file.
 """
 
 from __future__ import annotations
@@ -26,11 +26,20 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True)
+class Layout:
+    project_config_dir: str = "projects-root"
+    control_plane: str = "control-plane.md"
+    local_dir: str = ".docs"
+    control_plane_managed: bool = True
+
+
+@dataclass(frozen=True)
 class Config:
     runtimes: dict[str, RuntimeConfig] = field(default_factory=dict)
     projects_root: Path | None = None
     name: str = DEFAULT_NAME
     gate_private: bool = False
+    layout: Layout = field(default_factory=Layout)
 
 
 def validate_name(value: object) -> bool:
@@ -63,6 +72,29 @@ def _runtime(path: Path, name: str, table: object) -> RuntimeConfig:
     return RuntimeConfig(enabled=enabled, target=_expand(target) if target else None)
 
 
+_LAYOUT_KEYS = ("project_config_dir", "control_plane", "local_dir", "control_plane_managed")
+
+
+def _layout(path: Path, table: object) -> Layout:
+    if not isinstance(table, dict):
+        raise _fail(path, "[layout] must be a table")
+    unknown = sorted(set(table) - set(_LAYOUT_KEYS))
+    if unknown:
+        raise _fail(path, f"layout has unknown key {unknown[0]}")
+    values = {}
+    for key, value in table.items():
+        if key == "control_plane_managed":
+            if not isinstance(value, bool):
+                raise _fail(path, "layout.control_plane_managed must be true or false")
+            values[key] = value
+            continue
+        parts = value.split("/") if isinstance(value, str) else []
+        if not parts or value.startswith("/") or "" in parts or ".." in parts or "." in parts:
+            raise _fail(path, f"layout.{key} must be a relative path inside its root, with no `..`")
+        values[key] = value
+    return Layout(**values)
+
+
 def load_config(root: Path) -> Config:
     """Read `<root>/stratarc.toml`; return the defaults when the file is absent."""
     path = Path(root) / CONFIG_NAME
@@ -93,8 +125,11 @@ def load_config(root: Path) -> Config:
     if not isinstance(gate_private, bool):
         raise _fail(path, "validate.gate_private must be true or false")
 
+    layout = _layout(path, data.get("layout", {}))
+
     return Config(
         gate_private=gate_private,
+        layout=layout,
         name=name,
         runtimes=runtimes,
         projects_root=_expand(projects) if projects else None,

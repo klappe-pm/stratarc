@@ -36,7 +36,7 @@ import tempfile
 
 from stratarc import validate
 from stratarc.adapters._common import runtime_registry
-from stratarc.paths import SOURCE_VARIABLE, home, source_root
+from stratarc.paths import SOURCE_VARIABLE, control_plane_file, home, project_config_dir, source_root
 from stratarc.validate import bound_source
 
 
@@ -185,7 +185,7 @@ def _refused(read_only: bool, layer: str, key: str, runtime: str = "", file: str
 
 
 def _project_names(root: pathlib.Path) -> list[str]:
-    source = root / "projects-root"
+    source = project_config_dir(root)
     return sorted(p.name for p in source.iterdir() if p.is_dir()) if source.is_dir() else []
 
 
@@ -231,7 +231,7 @@ def _reached_projects(root: pathlib.Path) -> list[str]:
     try:
         from stratarc.control_plane import ControlPlane
 
-        plane = ControlPlane.load(root / "control-plane.md")
+        plane = ControlPlane.load(control_plane_file(root))
         if plane.rows:
             return list(plane.projects())
     except Exception:
@@ -915,7 +915,7 @@ def run_prune(root: pathlib.Path, live: dict[str, tuple[str, pathlib.Path]], *, 
             print(f"sync: prune: refusing; components.json: {problem}", file=sys.stderr)
         return 2
 
-    cp = ControlPlane.load(root / "control-plane.md")
+    cp = ControlPlane.load(control_plane_file(root))
     if cp.rows:
         live = {k: v for k, v in live.items() if cp.enabled("global", f"runtime:{k}")}
 
@@ -1046,7 +1046,7 @@ def run_reconcile(root: pathlib.Path, check: bool) -> int:
     emit_process_output(result)
     if not check and result.returncode == 0:
         # The reconciler rewrites control-plane.md and the snapshot in each active project.
-        after = _digest(root / "control-plane.md")
+        after = _digest(control_plane_file(root))
         names = _project_names(root)
         for name in names or [""]:
             _record_change(
@@ -1300,7 +1300,7 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
     from stratarc.permissions import policy_version as _policy_version_of
     from stratarc.staging import build_stage, cleanup_all
 
-    cp = ControlPlane.load(root / "control-plane.md")
+    cp = ControlPlane.load(control_plane_file(root))
 
     # runtime:<name> rows in the global column gate which runtimes receive anything
     if cp.rows:

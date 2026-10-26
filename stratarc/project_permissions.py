@@ -32,7 +32,7 @@ from typing import Callable, Iterable
 
 from stratarc.adapters._text import set_top_level, strip_jsonc_comments
 from stratarc.deploy_guard import refusal
-from stratarc.paths import home, projects_dir, source_root
+from stratarc.paths import home, project_config_dir, projects_dir, source_root
 from stratarc.permissions import (
     MAX_WALK_DEPTH,
     PRUNE_DIRS,
@@ -297,7 +297,7 @@ def _project_scope(name: str, directory: pathlib.Path, shared: dict) -> Scope:
 
 def _scoped_projects(source: pathlib.Path, shared: dict) -> dict[str, Scope]:
     """Every project under source/projects-root whose permissions.json declares a projectScope, by name."""
-    base = source / "projects-root"
+    base = project_config_dir(source)
     if not base.is_dir():
         return {}
     return {

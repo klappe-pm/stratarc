@@ -143,10 +143,18 @@ def frontmatter(lines: list[str]) -> dict[str, tuple[str, int]]:
     return result
 
 
-def classify(rel: str) -> str | None:
-    """The node type for a repository-relative path, or None when the file is not modelled."""
+def classify(rel: str, project_config_dir: str = "projects-root", control_plane: str = "control-plane.md") -> str | None:
+    """The node type for a repository-relative path, or None when the file is not modelled.
+
+    ``project_config_dir`` and ``control_plane`` are the source root's configured layout (stratarc.config.Layout).
+    """
     parts = rel.split("/")
     name = parts[-1]
+    if rel == control_plane:
+        return "inventory"
+    depth = len(project_config_dir.split("/"))
+    if rel.startswith(project_config_dir + "/") and len(parts) >= depth + 2:
+        return "project-config"
     if len(parts) == 1:
         return ROOT_FILES.get(name)
     top = parts[0]
@@ -188,8 +196,6 @@ def classify(rel: str) -> str | None:
         return "agent"
     if top in DOC_TOPS and name.endswith(".md") and not rel.startswith(DOC_SKIP):
         return "doc"
-    if top == "projects-root" and len(parts) >= 3:
-        return "project-config"
     return None
 
 
@@ -230,6 +236,15 @@ def tracked_files(root: Path) -> set[str] | None:
 class Graph:
     def __init__(self, root: Path):
         self.root = root.resolve()
+        from stratarc.config import ConfigError, Layout, load_config
+
+        try:
+            layout = load_config(self.root).layout
+        except ConfigError:
+            layout = Layout()
+        self.cfg_dir = layout.project_config_dir
+        self.cp_path = layout.control_plane
+        self.top_dirs = (*TOP_DIRS, self.cfg_dir.split("/", 1)[0])
         self.nodes: dict[str, dict] = {}
         self.edges: list[dict] = []
         self._edge_index: dict[tuple[str, str, str], dict] = {}
@@ -352,14 +367,14 @@ class Graph:
 
     def discover(self) -> None:
         for rel in self.paths():
-            node_type = classify(rel)
+            node_type = classify(rel, self.cfg_dir, self.cp_path)
             if node_type:
                 self.add_node(rel, node_type, path=rel)
         for name in self.directories("skills"):
             has_entry = self.exists(f"skills/{name}/SKILL.md")
             self.add_node(f"skills/{name}", "skill", label=name, path=f"skills/{name}/SKILL.md" if has_entry else f"skills/{name}", entry=has_entry)
-        for name in self.directories("projects-root"):
-            self.add_node(f"project:{name}", "project", label=name, path=f"projects-root/{name}")
+        for name in self.directories(self.cfg_dir):
+            self.add_node(f"project:{name}", "project", label=name, path=f"{self.cfg_dir}/{name}")
         retired = self.root / "rules" / "retired.json"
         if self.exists("rules/retired.json") and retired.is_file():
             try:
@@ -608,7 +623,7 @@ class Graph:
                 self.capability(node_id, match.group(1), match.group(2), evidence, confidence="low")
             for match in USE_PAREN.finditer(line):
                 self.capability(node_id, match.group(1).lstrip("/"), None, evidence)
-        if node_id == "control-plane.md":
+        if node_id == self.cp_path:
             self.extract_control_plane()
         if node["type"] == "skill":
             self.check_skill_definition(node_id, rel)
@@ -635,10 +650,10 @@ class Graph:
         if node_id.startswith("skills/") and top in SKILL_LOCAL_DIRS:
             if self.exists(f"{node_id}/{token}"):
                 return
-            if top not in TOP_DIRS:
+            if top not in self.top_dirs:
                 self.ref(node_id, f"{node_id}/{token}", "cites", evidence)
                 return
-        if top not in TOP_DIRS:
+        if top not in self.top_dirs:
             return
         if top in DOC_TOPS and (is_definition or not Path(token).suffix):
             return
@@ -650,7 +665,7 @@ class Graph:
 
     def extract_control_plane(self) -> None:
         columns: list[str] = []
-        for number, line in enumerate(self.lines("control-plane.md"), 1):
+        for number, line in enumerate(self.lines(self.cp_path), 1):
             if line.startswith("| option |"):
                 columns = [c.strip() for c in line.strip().strip("|").split("|")][1:]
                 for column in columns:
@@ -670,13 +685,13 @@ class Graph:
                 if column == "global":
                     self.nodes[source]["global"] = True
                 else:
-                    self.add_edge(source, f"project:{column}", "deploys", f"control-plane.md:{number}")
+                    self.add_edge(source, f"project:{column}", "deploys", f"{self.cp_path}:{number}")
 
     def extract_project_config(self, node_id: str) -> None:
         """A project-local file configures its project. A ``surfaces.json`` ``copy`` list names the
         instruction surfaces sync-projects renders from the project's AGENTS.md (CODEX.md and so on),
         not files beside it, so the list is kept as an attribute and produces no path edges."""
-        project = node_id.split("/")[1]
+        project = node_id.split("/")[len(self.cfg_dir.split("/"))]
         self.add_edge(node_id, f"project:{project}", "configures", f"{node_id}:1")
         if node_id.endswith("surfaces.json"):
             try:
@@ -685,7 +700,7 @@ class Graph:
                 self.findings.append({"severity": "error", "check": "invalid-json", "node": node_id, "message": "surfaces file is not valid JSON", "evidence": f"{node_id}:1"})
                 return
             self.nodes[node_id]["surfaces"] = list(data.get("copy", []))
-            master = f"projects-root/{project}/AGENTS.md"
+            master = f"{self.cfg_dir}/{project}/AGENTS.md"
             if data.get("copy") and master not in self.nodes:
                 self.add_edge(node_id, master, "configures", f"{node_id}:1", dangling=True)
 
@@ -781,10 +796,10 @@ class Graph:
             result = subprocess.run([sys.executable, "-m", "stratarc.gen_rules_digest", "--check", str(agents), "--rules-root", str(self.root / "rules")], capture_output=True, text=True, timeout=60, env=environment)
             if result.returncode != 0:
                 found.append({"severity": "error", "check": "digest-drift", "node": "AGENTS.md", "message": "rules digest differs from rules/; run python -m stratarc.gen_rules_digest --embed AGENTS.md", "evidence": "AGENTS.md:1"})
-        if (self.root / "control-plane.md").is_file():
+        if (self.root / self.cp_path).is_file():
             result = subprocess.run([sys.executable, "-m", "stratarc.reconcile", "--check", "--root", str(self.root)], capture_output=True, text=True, timeout=60, cwd=self.root, env=environment)
             if result.returncode != 0:
-                found.append({"severity": "error", "check": "control-plane-drift", "node": "control-plane.md", "message": "inventory differs from source; run python -m stratarc.reconcile", "evidence": "control-plane.md:1"})
+                found.append({"severity": "error", "check": "control-plane-drift", "node": self.cp_path, "message": "inventory differs from source; run python -m stratarc.reconcile", "evidence": "control-plane.md:1"})
         return found
 
     def child_environment(self) -> dict[str, str]:

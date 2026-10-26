@@ -22,12 +22,10 @@ import sys
 from stratarc.adapters._common import runtime_registry
 from stratarc.config import ConfigError
 from stratarc.control_plane import ControlPlane
-from stratarc.paths import engine_name, projects_dir, source_root
+from stratarc.paths import control_plane_file, engine_name, local_dir_name, project_config_dir, projects_dir, source_root
 from stratarc.public_targets import PublicTargetsUnreadable, is_public_checkout, load_public_targets, origin_slug
 from stratarc.staging import PROJECT_DIRECTORIES as CONFIG_DIRECTORIES
 
-CONTROL_PLANE_NAME = "control-plane.md"
-SNAPSHOT_DIR = ".docs"
 GENERATED_PARTS = {"__pycache__", ".pytest_cache"}
 GENERATED_SUFFIXES = {".pyc", ".pyo"}
 
@@ -48,7 +46,7 @@ def root() -> pathlib.Path:
 
 def control_plane_path() -> pathlib.Path:
     """The control-plane.md this run reads and writes."""
-    return root() / CONTROL_PLANE_NAME
+    return control_plane_file(root())
 
 
 def snapshot_name() -> str:
@@ -194,7 +192,7 @@ def checkout_origin(checkout: pathlib.Path) -> str | None:
 
 
 def source_projects() -> dict[str, pathlib.Path]:
-    projects = root() / "projects-root"
+    projects = project_config_dir(root())
     if not projects.is_dir():
         return {}
     return {
@@ -651,7 +649,7 @@ def refresh_snapshots(
     body = (header + document).encode("utf-8")
     changes: list[str] = []
     for project, checkout in checkouts.items():
-        target = checkout / SNAPSHOT_DIR / name
+        target = checkout / local_dir_name(root()) / name
         for stale in (checkout / ".claude" / name, checkout / name):
             if stale.is_file():
                 changes.append(f"{project}: remove {stale}")
@@ -667,6 +665,10 @@ def refresh_snapshots(
 
 
 def reconcile(check: bool = False, snapshots: bool = True) -> tuple[bool, list[str]]:
+    from stratarc.config import load_config
+
+    if not load_config(root()).layout.control_plane_managed:
+        return False, []
     control_plane = control_plane_path()
     cp = ControlPlane.load(control_plane)
     rule_tiers = load_rule_tiers()
