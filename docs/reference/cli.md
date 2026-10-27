@@ -23,6 +23,7 @@ This page describes how the `stratarc` command behaves as a whole: how it finds 
 | `projects` | delivers `projects-root/` into the managed project checkouts |
 | `gen-rules-digest` | renders or checks the rules digest in instruction files |
 | `components` | validates `components.json` and lists what it declares |
+| `drift` | reports where checkouts differ from what the control plane delivers, writes nothing to them and exits 6 on drift |
 | `adapter` | lists, shows, creates, registers and deprecates adapters |
 
 ## Global Options
@@ -60,7 +61,7 @@ With `--json` a command prints exactly one object on standard output and exits w
 }
 ```
 
-`ok` is true and `error` is null on success, and `data` then holds the command's result. For `sync`, `check`, `diff`, `prune`, `reconcile`, `validate`, `projects`, `gen-rules-digest` and `components`, `data` holds `command`, `exit`, `stdout` and `stderr` whenever the command ran, whatever its status; a refusal before it runs, such as `msg-1001`, leaves `data` null. `exit` is the status stratarc exits with, after the drift mapping under [Exit Statuses](#exit-statuses), so `stratarc --json check` on a drifted deployment reports `"exit": 6`. Without `--json`, a refusal prints one line headed by its message id, one line of recovery and a link to the message's entry in [Errors](generated/errors.md) to standard error.
+`ok` is true and `error` is null on success, and `data` then holds the command's result. For `sync`, `check`, `diff`, `prune`, `reconcile`, `validate`, `projects`, `gen-rules-digest`, `components` and `drift`, `data` holds `command`, `exit`, `stdout` and `stderr` whenever the command ran, whatever its status; a refusal before it runs, such as `msg-1001`, leaves `data` null. `exit` is the status stratarc exits with, after the drift mapping under [Exit Statuses](#exit-statuses), so `stratarc --json check` on a drifted deployment reports `"exit": 6`. Without `--json`, a refusal prints one line headed by its message id, one line of recovery and a link to the message's entry in [Errors](generated/errors.md) to standard error.
 
 ## Mistyped Commands and Arguments
 
@@ -79,7 +80,7 @@ An unknown command is refused with `msg-1010`, which names the closest command w
 | 6 | drift: the deployed files differ from what the source renders |
 | 130 | interrupted |
 
-A command that reports drift (`check`, `reconcile --check`, `projects --check`, `projects --verify`, `gen-rules-digest --check`) exits 6 where its module returns 1.
+A command that reports drift (`check`, `reconcile --check`, `projects --check`, `projects --verify`, `gen-rules-digest --check`, `drift`) exits 6 where its module returns 1.
 
 ## Environment Variables
 

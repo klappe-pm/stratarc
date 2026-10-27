@@ -33,6 +33,7 @@ PASSTHROUGH = {
     "projects": "deliver projects-root/ into the managed project checkouts",
     "gen-rules-digest": "render or check the rules digest in instruction files",
     "components": "validate components.json and list what it declares",
+    "drift": "report where checkouts differ from what the control plane delivers",
 }
 
 # Resources whose module prints its own result and error envelope. The command line forwards the arguments, adds --json when the global flag is set, resolves the module's string error code to a catalog message and maps the exit status.
@@ -276,6 +277,10 @@ def _engine_main(command: str) -> Callable[[list[str] | None], int]:
         from stratarc import gen_rules_digest
 
         return gen_rules_digest.main
+    if command == "drift":
+        from stratarc import drift
+
+        return drift.main
     from stratarc import components
 
     return components.main
@@ -333,7 +338,7 @@ def _reports_drift(command: str, argv: list[str]) -> bool:
         return "--check" in argv or "--verify" in argv
     if command == "gen-rules-digest":
         return "--check" in argv
-    return False
+    return command == "drift"
 
 
 def cmd_engine(args: argparse.Namespace, rest: list[str]) -> tuple[int, dict]:
