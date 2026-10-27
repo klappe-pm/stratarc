@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://pypi.org/project/stratarc/"><img src="https://img.shields.io/pypi/v/stratarc?style=flat-square&color=3ddc84&labelColor=162233&label=PyPI" alt="PyPI version"></a>
   <a href="https://pypi.org/project/stratarc/"><img src="https://img.shields.io/pypi/pyversions/stratarc?style=flat-square&color=5aa9ff&labelColor=162233&label=Python" alt="Python versions"></a>
-  <a href="https://github.com/klappe-pm/stratarc/releases"><img src="https://img.shields.io/github/v/release/klappe-pm/stratarc?style=flat-square&color=3ddc84&labelColor=162233&label=release" alt="Latest release"></a>
+  <a href="https://github.com/klappe-pm/stratarc/tags"><img src="https://img.shields.io/github/v/tag/klappe-pm/stratarc?style=flat-square&color=3ddc84&labelColor=162233&label=release" alt="Latest release"></a>
   <a href="https://github.com/klappe-pm/stratarc/blob/main/LICENSE"><img src="https://img.shields.io/github/license/klappe-pm/stratarc?style=flat-square&color=5aa9ff&labelColor=162233&label=license" alt="MIT license"></a>
   <a href="https://github.com/klappe-pm/stratarc/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/dependencies-none-3ddc84?style=flat-square&labelColor=162233" alt="No runtime dependencies"></a>
   <a href="https://github.com/klappe-pm/stratarc/blob/main/docs/README.md"><img src="https://img.shields.io/badge/runtimes-5-5aa9ff?style=flat-square&labelColor=162233" alt="Five supported runtimes"></a>
