@@ -1818,7 +1818,10 @@ def build_parser() -> argparse.ArgumentParser:
             "  stratarc projects --check               show what would change, exit 1 if stale\n"
             "  stratarc projects --only my-project     deliver one project\n"
             "  stratarc projects --adopt my-project    capture an existing checkout's config\n"
-            "                                          into projects-root/my-project/"
+            "                                          into projects-root/my-project/\n"
+            "  stratarc projects --new my-project --remote owner/my-project\n"
+            "                                          load a new project: root, control plane, registries\n"
+            "  stratarc projects --registry-check      check the control plane against the roots and registries"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1842,6 +1845,41 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="report manifest and filesystem disagreement, exit 1 if any",
     )
+    ap.add_argument(
+        "--new",
+        metavar="NAME",
+        help="load a new project NAME: copy the source root's project template to its root folder, add its row and column to the control plane and its slug to the registries, add the .gitignore block and local/ folder to its checkout, then check it; safe to repeat; with --check or --dry-run it writes nothing; it never delivers config (that stays with `stratarc sync`)",
+    )
+    ap.add_argument(
+        "--checkout",
+        metavar="PATH",
+        help="with --new: the project's checkout (default: active/NAME under the projects root)",
+    )
+    ap.add_argument(
+        "--remote",
+        metavar="OWNER/REPO",
+        help="with --new: the project's GitHub slug, recorded in remotes.json and as the origin in the control plane",
+    )
+    ap.add_argument(
+        "--public",
+        action="store_true",
+        help="with --new: the project is a public repository; list it in public-targets.json and give it no configuration",
+    )
+    ap.add_argument(
+        "--workflows",
+        action="store_true",
+        help="with --new: also copy the source root's optional workflows.toml project template, if it has one",
+    )
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="with --new: the same as --check",
+    )
+    ap.add_argument(
+        "--registry-check",
+        action="store_true",
+        help="read only: report a control plane project without a root folder or a remotes.json entry, a root folder not in the control plane, and a public project with a row, one per line, exit 1 if any",
+    )
     ap.add_argument("--skip-reconcile", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument(
         "--root",
@@ -1859,6 +1897,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.root or not _ROOT_CONFIGURED:
         configure_root(source_root(args.root))
     load_renderer_extensions()
+
+    if args.new or args.registry_check:
+        from stratarc import projects_new
+
+        if args.registry_check:
+            return projects_new.run_registry_check(ROOT)
+        return projects_new.run_new(
+            ROOT,
+            args.new,
+            checkout=args.checkout,
+            remote=args.remote,
+            public=args.public,
+            workflows=args.workflows,
+            dry=args.check or args.dry_run,
+        )
+    for flag in ("checkout", "remote", "public", "workflows", "dry_run"):
+        if getattr(args, flag):
+            print(f"{PROG}: --{flag.replace('_', '-')} needs --new", file=sys.stderr)
+            return 2
 
     # The engine's reconciler, in process, handed the same root this run
     # delivers from.
