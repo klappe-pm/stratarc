@@ -18,11 +18,13 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime
+import fnmatch
 import json
 import pathlib
+import subprocess
 import sys
 
-from stratarc import changelog, drift_levels, paths
+from stratarc import changelog, drift_levels, drift_records, paths
 
 PROG = "stratarc drift"
 SEVERITIES = ("error", "warn", "info")
@@ -38,6 +40,13 @@ RULES = {
     "lv-fact-conflict": "a nested file and an ancestor give different commands for the same job",
     "lv-restated": "a nested file repeats a paragraph of an ancestor word for word",
     "lv-dead-reference": "a link or path in an instruction file that does not resolve",
+    "dc-pointer-dangling": "a .pointer file whose target is missing, or that names no path or more than one",
+    "dc-dated-reference": "an instruction file, hook or script cites a dated file name that a pointer already names",
+    "dc-superseded-cited": "a record marked superseded is still cited as current by an instruction file",
+    "dc-supersede-unpaired": "record A supersedes B but B does not name A, or the reverse",
+    "dc-two-homes": "the same plan or decision sits in the project root and in the checkout with different content",
+    "dc-plan-stale": "a plan with status INPRG or REVIEW that has not been revised for a set number of days",
+    "dc-waiver": "a drift waiver that has expired or is missing its rule, reason or expiry date",
     "in-dangling": "a reference inside the source root that does not resolve",
     "in-retired-name": "text naming a retired rule",
 }
@@ -118,6 +127,41 @@ def from_levels(project: str, items: list[dict]) -> list[Finding]:
     return [Finding(i["rule"], i["severity"], project, i["path"], i["message"], i["hint"]) for i in items]
 
 
+def load_waivers(root: pathlib.Path) -> list[dict]:
+    """The waivers in drift-waivers.json beside the control plane file, or none."""
+    file = paths.control_plane_file(root).parent / "drift-waivers.json"
+    if not file.is_file():
+        return []
+    return list(json.loads(file.read_text(encoding="utf-8")).get("waivers", []))
+
+
+def apply_waivers(found: list[Finding], waivers: list[dict], today: datetime.date) -> list[Finding]:
+    """Drop the findings a live waiver covers. An expired or incomplete waiver covers nothing and is itself a finding.
+
+    A waiver names a rule and may narrow it by project and by a path pattern; it must carry a reason and an expiry date.
+    """
+    live: list[dict] = []
+    notes: list[Finding] = []
+    for waiver in waivers:
+        label = f"{waiver.get('rule', '?')} {waiver.get('project', '')} {waiver.get('path', '')}".strip()
+        try:
+            expires = datetime.date.fromisoformat(str(waiver["expires"]))
+            if not waiver.get("rule") or not waiver.get("reason"):
+                raise KeyError("reason")
+        except (KeyError, ValueError):
+            notes.append(Finding("dc-waiver", "warn", waiver.get("project", ""), waiver.get("path", ""), f"waiver {label} needs a rule, a reason and an expiry date", "complete the entry in drift-waivers.json"))
+            continue
+        if expires < today:
+            notes.append(Finding("dc-waiver", "warn", waiver.get("project", ""), waiver.get("path", ""), f"waiver {label} expired on {expires.isoformat()}", "renew it with a new date and reason, or fix the finding"))
+            continue
+        live.append(waiver)
+
+    def waived(f: Finding) -> bool:
+        return any(w["rule"] == f.rule and w.get("project", f.project) == f.project and fnmatch.fnmatch(f.path, w.get("path", "*")) for w in live)
+
+    return [f for f in found if not waived(f)] + notes
+
+
 def from_graph(findings: list[dict]) -> list[Finding]:
     severity = {"error": "error", "warning": "warn"}
     found: list[Finding] = []
@@ -127,12 +171,13 @@ def from_graph(findings: list[dict]) -> list[Finding]:
     return found
 
 
-def collect(root: pathlib.Path) -> list[Finding]:
+def collect(root: pathlib.Path, today: datetime.date | None = None) -> list[Finding]:
     """Run every check against the source root and return the findings. Writes nothing to a checkout."""
     from stratarc import projects, source_graph
     from stratarc.control_plane import ControlPlane
     from stratarc.staging import cleanup_all
 
+    today = today or datetime.date.today()
     projects.configure_root(root)
     projects.load_renderer_extensions()
     cp = ControlPlane.load(paths.control_plane_file(root))
@@ -158,8 +203,10 @@ def collect(root: pathlib.Path) -> list[Finding]:
         if checkout is not None and checkout.is_dir():
             nested, copies = declared(paths.project_config_dir(root) / name)
             found += from_levels(name, drift_levels.check(checkout, nested, copies))
+            found += from_levels(name, drift_records.check(checkout, paths.project_config_dir(root) / name, today))
+    found += from_levels("", drift_records.check(root, None, today))
     found += from_graph(source_graph.build_graph(root).check(live=False))
-    return dedupe(found)
+    return dedupe(apply_waivers(found, load_waivers(root), today))
 
 
 def dedupe(found: list[Finding]) -> list[Finding]:
@@ -248,6 +295,23 @@ def session_line(root: pathlib.Path, start: pathlib.Path) -> str:
     return line
 
 
+def staged_paths(checkout: pathlib.Path) -> set[str]:
+    result = subprocess.run(["git", "-C", str(checkout), "diff", "--cached", "--name-only"], capture_output=True, text=True, timeout=30)
+    return {line for line in result.stdout.splitlines() if line}
+
+
+def staged_findings(root: pathlib.Path, start: pathlib.Path) -> list[Finding]:
+    """Folder level and record findings for the staged files of the checkout holding `start`. For a pre-commit hook."""
+    checkout = checkout_of(start)
+    if checkout is None:
+        return []
+    config_dir = paths.project_config_dir(root) / checkout.name
+    nested, copies = declared(config_dir)
+    staged = staged_paths(checkout)
+    items = drift_levels.check(checkout, nested, copies) + drift_records.check(checkout, config_dir)
+    return dedupe(apply_waivers(from_levels(checkout.name, [i for i in items if i["path"] in staged]), load_waivers(root), datetime.date.today()))
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog=PROG,
@@ -258,6 +322,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--format", choices=("text", "json"), default="text", help="output format (default: text)")
     ap.add_argument("--report", action="store_true", help="also write a Markdown report and a dated copy under the state home")
     ap.add_argument("--here", action="store_true", help="session start mode: check only the checkout holding the current folder, print one line when it has findings, always exit 0")
+    ap.add_argument("--staged", action="store_true", help="pre-commit mode: check only the staged files of the checkout holding the current folder, exit 1 on an error level finding")
     ap.add_argument("--root", metavar="PATH", help="the source root (default: $STRATARC_SOURCE, then the nearest stratarc.toml, then the current directory)")
     modes = ap.add_subparsers(dest="mode")
     explain = modes.add_parser("explain", help="list every instruction file that applies to a path, with conflicts marked")
@@ -277,6 +342,11 @@ def main(argv: list[str] | None = None) -> int:
         for line in drift_levels.explain(checkout, target):
             print(line)
         return 0
+    if args.staged:
+        found = staged_findings(root, pathlib.Path.cwd())
+        for f in found:
+            print(f.line())
+        return 1 if any(f.severity == "error" for f in found) else 0
     if args.here:
         line = session_line(root, pathlib.Path.cwd())
         if line:

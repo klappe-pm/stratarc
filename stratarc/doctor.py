@@ -148,6 +148,7 @@ def permissions_table() -> list[dict]:
         _row("drift", [_SOURCE, _CHECKOUTS], [], runs=["git, to read a checkout's state"]),
         _row("drift --report", [_SOURCE, _CHECKOUTS], [_HOME + " (drift report)"], runs=["git, to read a checkout's state"]),
         _row("drift --here", [_SOURCE, _CHECKOUTS], [_HOME + " (session cache)"]),
+        _row("drift --staged", [_SOURCE, _CHECKOUTS], [], runs=["git, to list the staged files"]),
         _row("gen-rules-digest", [_SOURCE], ["the marked block in the files named"]),
         _row("components", [_SOURCE], []),
         _row("adapter list|show|status", [_HOME, _TARGETS], [], runs=["each runtime's --version, for status"]),
