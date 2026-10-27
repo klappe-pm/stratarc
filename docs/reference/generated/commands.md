@@ -201,19 +201,43 @@ deliver projects-root/ into the managed project checkouts.
 
 ```text
 usage: stratarc projects [-h] [--check] [--only NAME] [--adopt NAME]
-                         [--verify] [--root PATH]
+                         [--verify] [--new NAME] [--checkout PATH]
+                         [--remote OWNER/REPO] [--public] [--workflows]
+                         [--dry-run] [--registry-check] [--root PATH]
 
 options:
-  -h, --help    show this help message and exit
-  --check       dry run: print what each project would receive, write nothing,
-                exit 1 if any project is stale
-  --only NAME   deliver only NAME, the name of its directory under projects-
-                root, instead of every project
-  --adopt NAME  first time capture: copy project NAME's existing checkout
-                config into projects-root/NAME/, then exit
-  --verify      report manifest and filesystem disagreement, exit 1 if any
-  --root PATH   the source root to deliver from (default: $STRATARC_SOURCE,
-                then the nearest stratarc.toml, then the current directory)
+  -h, --help           show this help message and exit
+  --check              dry run: print what each project would receive, write
+                       nothing, exit 1 if any project is stale
+  --only NAME          deliver only NAME, the name of its directory under
+                       projects-root, instead of every project
+  --adopt NAME         first time capture: copy project NAME's existing
+                       checkout config into projects-root/NAME/, then exit
+  --verify             report manifest and filesystem disagreement, exit 1 if
+                       any
+  --new NAME           load a new project NAME: copy the source root's project
+                       template to its root folder, add its row and column to
+                       the control plane and its slug to the registries, add
+                       the .gitignore block and local/ folder to its checkout,
+                       then check it; safe to repeat; with --check or --dry-
+                       run it writes nothing; it never delivers config (that
+                       stays with `stratarc sync`)
+  --checkout PATH      with --new: the project's checkout (default:
+                       active/NAME under the projects root)
+  --remote OWNER/REPO  with --new: the project's GitHub slug, recorded in
+                       remotes.json and as the origin in the control plane
+  --public             with --new: the project is a public repository; list it
+                       in public-targets.json and give it no configuration
+  --workflows          with --new: also copy the source root's optional
+                       workflows.toml project template, if it has one
+  --dry-run            with --new: the same as --check
+  --registry-check     read only: report a control plane project without a
+                       root folder or a remotes.json entry, a root folder not
+                       in the control plane, and a public project with a row,
+                       one per line, exit 1 if any
+  --root PATH          the source root to deliver from (default:
+                       $STRATARC_SOURCE, then the nearest stratarc.toml, then
+                       the current directory)
 
 examples:
   stratarc projects                       deliver every project
@@ -221,6 +245,9 @@ examples:
   stratarc projects --only my-project     deliver one project
   stratarc projects --adopt my-project    capture an existing checkout's config
                                           into projects-root/my-project/
+  stratarc projects --new my-project --remote owner/my-project
+                                          load a new project: root, control plane, registries
+  stratarc projects --registry-check      check the control plane against the roots and registries
 ```
 
 ## `gen-rules-digest`

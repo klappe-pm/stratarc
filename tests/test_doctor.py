@@ -104,7 +104,7 @@ def test_the_permissions_table_covers_every_command_and_none_uses_the_network():
 def test_the_permissions_table_lists_exactly_these_commands_in_order():
     assert [row["command"] for row in doctor.permissions_table()] == [
         "init", "doctor", "doctor --clean --yes", "doctor --report", "sync", "sync --verify --rollback-on-drift", "check", "diff", "prune",
-        "reconcile", "validate", "projects", "drift", "drift --report", "drift --here", "drift --staged", "drift --repo", "drift --source", "workflows check", "workflows show", "gen-rules-digest", "components", "adapter list|show|status",
+        "reconcile", "validate", "projects", "projects --new", "projects --registry-check", "drift", "drift --report", "drift --here", "drift --staged", "drift --repo", "drift --source", "workflows check", "workflows show", "gen-rules-digest", "components", "adapter list|show|status",
         "adapter register|remove|deprecate", "adapter new",
     ]
 

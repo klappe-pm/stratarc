@@ -4,6 +4,8 @@ Scaffolding for a new project. It is part of the framework that becomes the stra
 
 ## steps
 
+Steps 1, 3 and 4 below are automated: run `stratarc projects --new <project>` (add `--remote <owner>/<repo>`, `--checkout <path>`, `--public` for a public repository, `--workflows` for the optional `workflows.toml` template; add `--check` to preview). It is safe to repeat, copies this folder's templates from your own source root, never overwrites a file, never delivers configuration into the checkout, and ends by checking the project. `stratarc projects --registry-check` verifies the control plane, the root folders and the registries agree. The manual steps remain as the description of what it does.
+
 1. Copy `templates/project/roots/` to `projects/roots/<project>/` and replace every `<project>` in its `AGENTS.md`. Fill in the sections from `project-context` on and leave any that do not apply empty; keep `source-and-sync`, `session-start` and `authority-order` as they are.
 2. Add the project's own skills, agents, commands, rules or hooks under `projects/roots/<project>/skills/`, `agents/`, `commands/`, `rules/` and `hooks/` only when it has them. Shared content stays in the root `skills/` and `rules/`.
 3. Copy `templates/project/checkout/.gitignore` and `templates/project/checkout/local/` into the new checkout. The `.gitignore` applies the visibility model and keeps the generated instruction files out of the project's git.
