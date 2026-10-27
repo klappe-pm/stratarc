@@ -1,0 +1,31 @@
+# Optional workflow module settings for this project. Delete this file to use the control plane defaults.
+# This example only turns the module on and tightens one gate. Every other key keeps the value from the
+# `[workflows]` table in stratarc.toml, or the built in default. Gates may only tighten: push-branch is
+# G1 by default, so G2 is allowed and G0 would be an error. Run `stratarc workflows check` after editing.
+
+enabled = true
+
+[gates]
+push-branch = "G2"
+
+# Other keys you can set, all optional:
+#
+# [paths]
+# plan = "PLAN.md"
+# handoff = "local/handoff.md"
+# backlog = "local/backlog.md"
+# reports = "local/reports"
+#
+# [claims]
+# mode = "plan"            # plan, files or off
+#
+# [decision-records]
+# enabled = false
+# check = "report"         # report, enforce or off
+#
+# [tickets]
+# backend = "backlog"      # github, backlog or off
+#
+# [automation]
+# pre-commit = "report"    # report, enforce or off
+# triage = "on-demand"     # on-demand, weekly or off

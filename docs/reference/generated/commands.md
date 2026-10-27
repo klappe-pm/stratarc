@@ -47,6 +47,7 @@ Global options are accepted before or after the command.
 | [`gen-rules-digest`](#gen-rules-digest) | render or check the rules digest in instruction files |
 | [`components`](#components) | validate components.json and list what it declares |
 | [`drift`](#drift) | report where checkouts differ from what the control plane delivers |
+| [`workflows`](#workflows) | check and show the optional workflow module configuration |
 | [`adapter`](#adapter) | manage the translators from the source to a runtime |
 
 ## `help`
@@ -314,6 +315,17 @@ examples:
   stratarc drift --report
   stratarc drift --here
   stratarc drift explain docs/guide/AGENTS.md
+```
+
+## `workflows`
+
+check and show the optional workflow module configuration.
+
+```text
+usage: stratarc workflows [-h] {check,show} ...
+
+options:
+  -h, --help    show this help message and exit
 ```
 
 ## `adapter`

@@ -34,6 +34,7 @@ PASSTHROUGH = {
     "gen-rules-digest": "render or check the rules digest in instruction files",
     "components": "validate components.json and list what it declares",
     "drift": "report where checkouts differ from what the control plane delivers",
+    "workflows": "check and show the optional workflow module configuration",
 }
 
 # Resources whose module prints its own result and error envelope. The command line forwards the arguments, adds --json when the global flag is set, resolves the module's string error code to a catalog message and maps the exit status.
@@ -281,6 +282,10 @@ def _engine_main(command: str) -> Callable[[list[str] | None], int]:
         from stratarc import drift
 
         return drift.main
+    if command == "workflows":
+        from stratarc import workflows
+
+        return workflows.main
     from stratarc import components
 
     return components.main

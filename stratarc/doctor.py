@@ -151,6 +151,8 @@ def permissions_table() -> list[dict]:
         _row("drift --staged", [_SOURCE, _CHECKOUTS], [], runs=["git, to list the staged files"]),
         _row("drift --repo", [_CHECKOUTS], []),
         _row("drift --source", [_SOURCE], []),
+        _row("workflows check", [_SOURCE], []),
+        _row("workflows show", [_SOURCE], []),
         _row("gen-rules-digest", [_SOURCE], ["the marked block in the files named"]),
         _row("components", [_SOURCE], []),
         _row("adapter list|show|status", [_HOME, _TARGETS], [], runs=["each runtime's --version, for status"]),

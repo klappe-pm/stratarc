@@ -36,3 +36,19 @@ project_config_dir = "projects/roots"
 control_plane = "projects/roots/control-plane.md"
 local_dir = "local"
 control_plane_managed = true
+
+# The optional workflow module. It is off until `enabled = true`; a project can also turn it on in
+# `projects/roots/<project>/workflows.toml`. Every key is optional, gates may only tighten the standing
+# policy, and each check starts in `report` mode. `stratarc workflows check` validates this table.
+# [workflows]
+# enabled = true
+#
+# [workflows.paths]
+# plan = "PLAN.md"
+# handoff = "local/handoff.md"
+#
+# [workflows.gates]
+# deploy = "G3"
+#
+# [workflows.tickets]
+# backend = "backlog"
