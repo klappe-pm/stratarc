@@ -286,7 +286,7 @@ report where checkouts differ from what the control plane delivers.
 
 ```text
 usage: stratarc drift [-h] [--format {text,json}] [--report] [--here]
-                      [--staged] [--root PATH]
+                      [--staged] [--repo] [--source] [--root PATH]
                       {explain} ...
 
 options:
@@ -300,6 +300,11 @@ options:
   --staged              pre-commit mode: check only the staged files of the
                         checkout holding the current folder, exit 1 on an
                         error level finding
+  --repo                project CI mode: check the whole checkout holding the
+                        current folder with no source root, exit 1 on an error
+                        level finding
+  --source              control plane CI mode: check the source root alone
+                        with no checkouts, exit 1 on an error level finding
   --root PATH           the source root (default: $STRATARC_SOURCE, then the
                         nearest stratarc.toml, then the current directory)
 

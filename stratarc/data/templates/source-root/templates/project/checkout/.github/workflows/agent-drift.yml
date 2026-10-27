@@ -1,0 +1,25 @@
+name: agent-drift
+
+# Optional. Copy this file into a project checkout as .github/workflows/agent-drift.yml.
+# It checks the repository alone: nested instruction files against their ancestors, dead references, pointers, supersede pairs and stale plans. It cannot compare against the control plane, which is not in the repository; the scheduled run and the session start hook cover that side.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install stratarc
+        run: pipx install stratarc==0.4.0
+      - name: Agent file drift
+        run: stratarc drift --repo

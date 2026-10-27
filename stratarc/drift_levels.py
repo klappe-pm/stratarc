@@ -128,8 +128,11 @@ def dead_references(checkout: pathlib.Path, path: pathlib.Path, text: str) -> li
     return list(missing.items())
 
 
-def check(checkout: pathlib.Path, declared: set[str], copies: tuple[str, ...] = SURFACES) -> list[dict]:
-    """Findings for one checkout as dicts of rule, severity, path, message and hint; the caller adds the project."""
+def check(checkout: pathlib.Path, declared: set[str] | None, copies: tuple[str, ...] = SURFACES) -> list[dict]:
+    """Findings for one checkout as dicts of rule, severity, path, message and hint; the caller adds the project.
+
+    `declared` is the set of nested files the project root declares. None means the declarations are not known, as in a project's own CI with no source root, and lv-undeclared-nested is skipped.
+    """
     found: list[dict] = []
 
     def add(rule: str, severity: str, path: pathlib.Path, message: str, hint: str) -> None:
@@ -144,7 +147,7 @@ def check(checkout: pathlib.Path, declared: set[str], copies: tuple[str, ...] = 
         rel = path.relative_to(checkout).as_posix()
         text = path.read_text(encoding="utf-8", errors="replace")
         nested = path.parent != checkout
-        if nested and rel not in declared and path.parent.relative_to(checkout).as_posix() not in declared:
+        if nested and declared is not None and rel not in declared and path.parent.relative_to(checkout).as_posix() not in declared:
             add("lv-undeclared-nested", "warn", path, f"{rel} is an instruction file below the root that the project root does not declare", 'list it under "nested" in the project root\'s surfaces.json, or remove it')
         sibling = path.parent / "AGENTS.md"
         mirror = path.name != "AGENTS.md" and sibling.is_file() and sibling.read_bytes() == path.read_bytes()

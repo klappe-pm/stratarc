@@ -162,3 +162,39 @@ def test_staged_mode_reports_only_staged_files_and_blocks_on_an_error(tmp_path, 
     monkeypatch.chdir(repo)
     monkeypatch.setattr(drift.paths, "source_root", lambda explicit=None: tmp_path)
     assert drift.main(["--staged"]) == 1
+
+
+def test_repo_mode_checks_the_whole_checkout_without_a_source_root(tmp_path):
+    root = tree(tmp_path, {"AGENTS.md": "# root\n", "docs/AGENTS.md": "# docs\n", "plans/BAD.pointer": "missing.md\n"})
+    found = drift.repo_findings(root)
+    assert [(f.rule, f.severity) for f in found] == [("dc-pointer-dangling", "error")]
+    assert drift.repo_findings(tmp_path / "nowhere") == []
+
+
+def test_repo_mode_exits_1_on_an_error_and_0_when_clean(tmp_path, monkeypatch):
+    bad = tree(tmp_path, {"plans/BAD.pointer": "missing.md\n"}, name="bad")
+    good = tree(tmp_path, {"AGENTS.md": "# root\n"}, name="good")
+    monkeypatch.chdir(bad)
+    assert drift.main(["--repo"]) == 1
+    monkeypatch.chdir(good)
+    assert drift.main(["--repo"]) == 0
+
+
+def test_source_mode_checks_the_source_root_alone(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "stratarc.toml").write_text('name = "x"\n')
+    (root / "plans").mkdir()
+    (root / "plans" / "BAD.pointer").write_text("missing.md\n")
+    monkeypatch.setattr(drift.paths, "control_plane_file", lambda r=None: root / "projects" / "roots" / "control-plane.md")
+    assert drift.main(["--source", "--root", str(root)]) == 1
+    assert "dc-pointer-dangling" in capsys.readouterr().out
+
+
+def test_the_templates_ship_the_ci_workflows_and_the_retired_names_rule_file():
+    from importlib.resources import files
+
+    base = files("stratarc") / "data" / "templates" / "source-root"
+    assert "stratarc drift --repo" in (base / "templates" / "project" / "checkout" / ".github" / "workflows" / "agent-drift.yml").read_text()
+    assert "stratarc drift --source" in (base / ".github" / "workflows" / "drift.yml").read_text()
+    assert 'id = "retired-name"' in (base / "hooks" / "guardline" / "retired-names.toml").read_text()

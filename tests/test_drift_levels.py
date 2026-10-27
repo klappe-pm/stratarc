@@ -120,3 +120,9 @@ def test_the_session_line_is_empty_when_clean_and_cached_by_mtime(tmp_path, monk
 def test_the_session_line_is_empty_outside_a_checkout(tmp_path, monkeypatch):
     monkeypatch.setattr(drift, "report_dir", lambda: tmp_path / "state")
     assert drift.session_line(tmp_path, tmp_path / "nowhere") == ""
+
+
+def test_without_declarations_the_undeclared_nested_rule_is_skipped(tmp_path):
+    root = checkout(tmp_path, {"AGENTS.md": "# root\n", "docs/AGENTS.md": "# docs\n"})
+    assert rules(drift_levels.check(root, None)) == []
+    assert rules(drift_levels.check(root, set())) == ["lv-undeclared-nested"]

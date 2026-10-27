@@ -312,6 +312,23 @@ def staged_findings(root: pathlib.Path, start: pathlib.Path) -> list[Finding]:
     return dedupe(apply_waivers(from_levels(checkout.name, [i for i in items if i["path"] in staged]), load_waivers(root), datetime.date.today()))
 
 
+def repo_findings(start: pathlib.Path) -> list[Finding]:
+    """The folder level and record rules over the whole checkout holding `start`, with no source root. For a project's own CI."""
+    checkout = checkout_of(start)
+    if checkout is None:
+        return []
+    items = drift_levels.check(checkout, None) + drift_records.check(checkout)
+    return dedupe(from_levels(checkout.name, items))
+
+
+def source_findings(root: pathlib.Path) -> list[Finding]:
+    """The reference graph and the record rules over the source root alone, with no checkouts. For the control plane's CI."""
+    from stratarc import source_graph
+
+    found = from_levels("", drift_records.check(root)) + from_graph(source_graph.build_graph(root).check(live=False))
+    return dedupe(apply_waivers(found, load_waivers(root), datetime.date.today()))
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog=PROG,
@@ -323,6 +340,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--report", action="store_true", help="also write a Markdown report and a dated copy under the state home")
     ap.add_argument("--here", action="store_true", help="session start mode: check only the checkout holding the current folder, print one line when it has findings, always exit 0")
     ap.add_argument("--staged", action="store_true", help="pre-commit mode: check only the staged files of the checkout holding the current folder, exit 1 on an error level finding")
+    ap.add_argument("--repo", action="store_true", help="project CI mode: check the whole checkout holding the current folder with no source root, exit 1 on an error level finding")
+    ap.add_argument("--source", action="store_true", help="control plane CI mode: check the source root alone with no checkouts, exit 1 on an error level finding")
     ap.add_argument("--root", metavar="PATH", help="the source root (default: $STRATARC_SOURCE, then the nearest stratarc.toml, then the current directory)")
     modes = ap.add_subparsers(dest="mode")
     explain = modes.add_parser("explain", help="list every instruction file that applies to a path, with conflicts marked")
@@ -332,7 +351,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.repo:
+        found = repo_findings(pathlib.Path.cwd())
+        for f in found:
+            print(f.line())
+        return 1 if any(f.severity == "error" for f in found) else 0
     root = paths.source_root(pathlib.Path(args.root) if args.root else None)
+    if args.source:
+        found = source_findings(root)
+        for f in found:
+            print(f.line())
+        return 1 if any(f.severity == "error" for f in found) else 0
     if args.mode == "explain":
         target = pathlib.Path(args.path).expanduser().resolve()
         checkout = checkout_of(target)
