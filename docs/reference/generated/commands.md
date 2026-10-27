@@ -285,13 +285,18 @@ examples:
 report where checkouts differ from what the control plane delivers.
 
 ```text
-usage: stratarc drift [-h] [--format {text,json}] [--report] [--root PATH]
+usage: stratarc drift [-h] [--format {text,json}] [--report] [--here]
+                      [--root PATH]
+                      {explain} ...
 
 options:
   -h, --help            show this help message and exit
   --format {text,json}  output format (default: text)
   --report              also write a Markdown report and a dated copy under
                         the state home
+  --here                session start mode: check only the checkout holding
+                        the current folder, print one line when it has
+                        findings, always exit 0
   --root PATH           the source root (default: $STRATARC_SOURCE, then the
                         nearest stratarc.toml, then the current directory)
 
@@ -299,6 +304,8 @@ examples:
   stratarc drift
   stratarc drift --format json
   stratarc drift --report
+  stratarc drift --here
+  stratarc drift explain docs/guide/AGENTS.md
 ```
 
 ## `adapter`

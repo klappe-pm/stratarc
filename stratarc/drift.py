@@ -22,7 +22,7 @@ import json
 import pathlib
 import sys
 
-from stratarc import changelog, paths
+from stratarc import changelog, drift_levels, paths
 
 PROG = "stratarc drift"
 SEVERITIES = ("error", "warn", "info")
@@ -33,6 +33,11 @@ RULES = {
     "cp-stale": "a delivered file differs from what a sync would write now",
     "cp-unregistered": "a checkout under the projects root that no manifest row claims",
     "cp-layout": "a checkout under the wrong status folder, or more than one checkout for a project",
+    "lv-undeclared-nested": "an instruction file below the checkout root that the project root does not declare",
+    "lv-surface-split": "sibling surfaces in a nested folder that differ where one should be a copy of the other",
+    "lv-fact-conflict": "a nested file and an ancestor give different commands for the same job",
+    "lv-restated": "a nested file repeats a paragraph of an ancestor word for word",
+    "lv-dead-reference": "a link or path in an instruction file that does not resolve",
     "in-dangling": "a reference inside the source root that does not resolve",
     "in-retired-name": "text naming a retired rule",
 }
@@ -102,6 +107,17 @@ def from_delivery(project: str, actions: list[str]) -> list[Finding]:
     return [Finding("cp-stale", "error", project, "", action, "run stratarc sync") for action in actions]
 
 
+def declared(config_dir: pathlib.Path) -> tuple[set[str], tuple[str, ...]]:
+    """The nested files a project root declares and its copy list, from its surfaces.json."""
+    file = config_dir / "surfaces.json"
+    data = json.loads(file.read_text(encoding="utf-8")) if file.is_file() else {}
+    return set(data.get("nested", [])), tuple(data.get("copy", drift_levels.SURFACES))
+
+
+def from_levels(project: str, items: list[dict]) -> list[Finding]:
+    return [Finding(i["rule"], i["severity"], project, i["path"], i["message"], i["hint"]) for i in items]
+
+
 def from_graph(findings: list[dict]) -> list[Finding]:
     severity = {"error": "error", "warning": "warn"}
     found: list[Finding] = []
@@ -135,6 +151,13 @@ def collect(root: pathlib.Path) -> list[Finding]:
                 found.append(Finding("cp-layout", "error", name, "", str(error), "resolve the refusal, then rerun"))
     finally:
         cleanup_all()
+    for name in cp.manifest:
+        if cp.status(name) != "active":
+            continue
+        checkout, _why = projects.resolve(name, cp)
+        if checkout is not None and checkout.is_dir():
+            nested, copies = declared(paths.project_config_dir(root) / name)
+            found += from_levels(name, drift_levels.check(checkout, nested, copies))
     found += from_graph(source_graph.build_graph(root).check(live=False))
     return dedupe(found)
 
@@ -178,22 +201,87 @@ def write_report(found: list[Finding], when: datetime.datetime) -> pathlib.Path:
     return latest
 
 
+def checkout_of(path: pathlib.Path) -> pathlib.Path | None:
+    """The nearest folder at or above a path that is a git repository."""
+    path = path.resolve()
+    for folder in [path, *path.parents]:
+        if (folder / ".git").exists():
+            return folder
+    return None
+
+
+def fingerprint(checkout: pathlib.Path, config_dir: pathlib.Path) -> str:
+    """Changes whenever an instruction file or the project's surfaces.json does."""
+    parts = [f"{p.relative_to(checkout)}:{p.stat().st_mtime_ns}:{p.stat().st_size}" for p in drift_levels.instruction_files(checkout)]
+    surfaces = config_dir / "surfaces.json"
+    if surfaces.is_file():
+        parts.append(f"surfaces:{surfaces.stat().st_mtime_ns}")
+    return "|".join(parts)
+
+
+def session_line(root: pathlib.Path, start: pathlib.Path) -> str:
+    """One line for a session start, empty when the checkout is clean. Cached by file mtime under the state home."""
+    checkout = checkout_of(start)
+    if checkout is None:
+        return ""
+    config_dir = paths.project_config_dir(root) / checkout.name
+    key = fingerprint(checkout, config_dir)
+    cache_file = report_dir() / "session-cache.json"
+    try:
+        cache = json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    entry = cache.get(str(checkout))
+    if entry and entry.get("key") == key:
+        line = entry["line"]
+    else:
+        nested, copies = declared(config_dir)
+        items = drift_levels.check(checkout, nested, copies)
+        errors = sum(i["severity"] == "error" for i in items)
+        line = f"{PROG}: {len(items)} drift findings ({errors} at error level) in {checkout.name}, run stratarc drift explain <path>" if items else ""
+        cache[str(checkout)] = {"key": key, "line": line}
+        try:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(json.dumps(cache), encoding="utf-8")
+        except OSError:
+            pass
+    return line
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog=PROG,
         description="Report where a checkout's agent files differ from what the control plane delivers, and where the source root's references break. Reads only; it never changes a checkout or the source root.",
-        epilog="examples:\n  stratarc drift\n  stratarc drift --format json\n  stratarc drift --report",
+        epilog="examples:\n  stratarc drift\n  stratarc drift --format json\n  stratarc drift --report\n  stratarc drift --here\n  stratarc drift explain docs/guide/AGENTS.md",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("--format", choices=("text", "json"), default="text", help="output format (default: text)")
     ap.add_argument("--report", action="store_true", help="also write a Markdown report and a dated copy under the state home")
+    ap.add_argument("--here", action="store_true", help="session start mode: check only the checkout holding the current folder, print one line when it has findings, always exit 0")
     ap.add_argument("--root", metavar="PATH", help="the source root (default: $STRATARC_SOURCE, then the nearest stratarc.toml, then the current directory)")
+    modes = ap.add_subparsers(dest="mode")
+    explain = modes.add_parser("explain", help="list every instruction file that applies to a path, with conflicts marked")
+    explain.add_argument("path", help="a file or folder inside a checkout")
     return ap
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = paths.source_root(pathlib.Path(args.root) if args.root else None)
+    if args.mode == "explain":
+        target = pathlib.Path(args.path).expanduser().resolve()
+        checkout = checkout_of(target)
+        if checkout is None:
+            print(f"{PROG}: {args.path} is not inside a git checkout", file=sys.stderr)
+            return 2
+        for line in drift_levels.explain(checkout, target):
+            print(line)
+        return 0
+    if args.here:
+        line = session_line(root, pathlib.Path.cwd())
+        if line:
+            print(line)
+        return 0
     when = datetime.datetime.now().astimezone()
     found = collect(root)
     if args.format == "json":
