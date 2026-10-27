@@ -27,3 +27,12 @@ target = "~/.cursor"
 [runtimes.opencode]
 enabled = false
 target = "~/.config/opencode"
+
+# Where this source root keeps project configuration, the control plane, and where each project keeps
+# internal work product. `stratarc reconcile` keeps the control plane's inventory current; set
+# `control_plane_managed = false` to maintain it by hand instead.
+[layout]
+project_config_dir = "projects/roots"
+control_plane = "projects/roots/control-plane.md"
+local_dir = "local"
+control_plane_managed = true

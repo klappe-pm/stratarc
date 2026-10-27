@@ -65,7 +65,7 @@ def test_declining_the_deploy_leaves_project_checkouts_untouched(home: Path, mon
     demo.mkdir(parents=True)
     subprocess.run(["git", "init", "-q", str(demo)], check=True)
     assert setup.run(ask=scripted(str(home / "src"), "claude", "n"), say=lambda _line: None) == 0
-    assert (home / "src" / "control-plane.md").is_file()
+    assert (home / "src" / "projects" / "roots" / "control-plane.md").is_file()
     assert [path.name for path in demo.iterdir()] == [".git"]
 
 

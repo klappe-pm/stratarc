@@ -55,7 +55,8 @@ def snapshot_name() -> str:
 
 
 def source_path(path: pathlib.Path) -> str:
-    return path.relative_to(root()).as_posix()
+    """The link target for *path*, relative to the folder the control plane sits in, so a link resolves from the control plane file wherever layout.control_plane puts it."""
+    return pathlib.Path(os.path.relpath(path, control_plane_path().parent)).as_posix()
 
 
 def _git_env() -> dict[str, str]:
