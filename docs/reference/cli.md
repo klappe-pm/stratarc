@@ -24,6 +24,7 @@ This page describes how the `stratarc` command behaves as a whole: how it finds 
 | `gen-rules-digest` | renders or checks the rules digest in instruction files |
 | `components` | validates `components.json` and lists what it declares |
 | `drift` | reports where checkouts differ from what the control plane delivers, writes nothing to them and exits 6 on drift |
+| `workflows` | checks and shows the optional workflow module configuration, in the control plane `[workflows]` table and each project's `workflows.toml`, and exits 1 on a problem |
 | `adapter` | lists, shows, creates, registers and deprecates adapters |
 
 ## Global Options
@@ -61,7 +62,7 @@ With `--json` a command prints exactly one object on standard output and exits w
 }
 ```
 
-`ok` is true and `error` is null on success, and `data` then holds the command's result. For `sync`, `check`, `diff`, `prune`, `reconcile`, `validate`, `projects`, `gen-rules-digest`, `components` and `drift`, `data` holds `command`, `exit`, `stdout` and `stderr` whenever the command ran, whatever its status; a refusal before it runs, such as `msg-1001`, leaves `data` null. `exit` is the status stratarc exits with, after the drift mapping under [Exit Statuses](#exit-statuses), so `stratarc --json check` on a drifted deployment reports `"exit": 6`. Without `--json`, a refusal prints one line headed by its message id, one line of recovery and a link to the message's entry in [Errors](generated/errors.md) to standard error.
+`ok` is true and `error` is null on success, and `data` then holds the command's result. For `sync`, `check`, `diff`, `prune`, `reconcile`, `validate`, `projects`, `gen-rules-digest`, `components`, `drift` and `workflows`, `data` holds `command`, `exit`, `stdout` and `stderr` whenever the command ran, whatever its status; a refusal before it runs, such as `msg-1001`, leaves `data` null. `exit` is the status stratarc exits with, after the drift mapping under [Exit Statuses](#exit-statuses), so `stratarc --json check` on a drifted deployment reports `"exit": 6`. Without `--json`, a refusal prints one line headed by its message id, one line of recovery and a link to the message's entry in [Errors](generated/errors.md) to standard error.
 
 ## Mistyped Commands and Arguments
 
