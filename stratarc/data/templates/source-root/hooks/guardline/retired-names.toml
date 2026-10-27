@@ -1,11 +1,11 @@
 schema_version = 1
 
-# Names of systems the cutover removed. Add a name here when a system is retired so a stale mention is caught where it is written. Guardline judges one text at a time, which is all this needs. Comparing two files is `stratarc drift`.
+# Names of systems your source root has retired. Replace the example pattern with the names you retired, one alternative per name, and keep the example lines true so `guardline rules check` still validates the rule. Guardline judges one text at a time, which is all this needs. Comparing two files is `stratarc drift`.
 
 [[rule]]
 id = "retired-name"
 family = "house"
-description = "Text naming a system the cutover removed: the old sync script, the projects-root folder, loadouts, the removed gateway, the old agent config tool or the removed scripts index."
-pattern = '\bsync\.py\b|projects-root/|\bloadouts\b|freellmapi|\bagentrc\b|\bSCRIPTS\.md\b'
-example_fires = "run sync.py before the commit"
+description = "Text naming a system this source root retired; cite its replacement instead."
+pattern = '\bold-sync-script\.py\b|\bretired-folder/'
+example_fires = "run old-sync-script.py before the commit"
 example_clean = "run stratarc sync before the commit"
