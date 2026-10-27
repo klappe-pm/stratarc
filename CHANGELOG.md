@@ -4,7 +4,13 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+### Added
+
+- A `[layout]` table in `stratarc.toml` names the source root's project configuration directory (`project_config_dir`), control plane file (`control_plane`) and each project's internal work product folder (`local_dir`). `control_plane_managed = false` marks a hand maintained control plane that reconcile leaves alone. Defaults keep the 0.3 layout.
+
 ### Changed
+
+- The rules digest rewrites `../` links in a rule so they resolve from the document that embeds the digest, and the source graph reads digest headings only inside the digest markers.
 
 - Releases publish through PyPI trusted publishing from a tag-triggered workflow, `.github/workflows/release.yml`, with every action pinned to a commit and every tool installed from a hash pinned lock file. No PyPI token is used. The cut-a-release guide describes the one-time setup.
 - The test extra requires pytest 9.0.3 or newer, since earlier releases carry CVE-2025-71176, and the build backend is pinned to hatchling 1.27 or newer, below 2.
