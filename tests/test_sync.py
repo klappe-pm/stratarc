@@ -21,7 +21,7 @@ import pytest
 
 from stratarc import sync
 from stratarc.adapters._common import runtime_registry
-from tests.conftest import REPO_ROOT, tree_snapshot
+from tests.conftest import PACKAGE_DIR, REPO_ROOT, tree_snapshot
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 SYNC_SOURCE = FIXTURES / "sync" / "source"
@@ -164,7 +164,7 @@ class TestRegenerateDerived:
 
     def test_a_fresh_scaffold_that_selects_no_rules_is_not_a_failure(self, tmp_path: Path) -> None:
         """`stratarc init` ships empty tiers; the first sync must degrade to a note, not stop with exit 2."""
-        template = Path(__file__).resolve().parents[1] / "stratarc" / "data" / "templates" / "source-root"
+        template = PACKAGE_DIR / "data" / "templates" / "source-root"
         root = tmp_path / "source"
         shutil.copytree(template, root)
         assert sync.regenerate_derived(root) == ["rules digest: no rules selected in rules/tiers.json, nothing to embed"]
@@ -439,7 +439,7 @@ class TestSourceRoot:
     def test_the_child_runs_the_engine_that_is_running(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("PYTHONPATH", "/existing/path")
         first, _, rest = sync.child_environment(tmp_path)["PYTHONPATH"].partition(os.pathsep)
-        assert Path(first) == REPO_ROOT
+        assert Path(first) == PACKAGE_DIR.parent
         assert rest == "/existing/path"
         child = subprocess.run(
             [sys.executable, "-c", "import stratarc, sys; print(stratarc.__file__)"],
@@ -448,7 +448,7 @@ class TestSourceRoot:
             cwd=tmp_path,
             env=sync.child_environment(tmp_path),
         )
-        assert Path(child.stdout.strip()).is_relative_to(REPO_ROOT)
+        assert Path(child.stdout.strip()).is_relative_to(PACKAGE_DIR.parent)
 
 
 class TestMainRefusesInvalidSourceFirst:
@@ -572,7 +572,7 @@ class TestRuntimeRegistry:
         assert sync.short(other / ".claude") == "~/.claude"
 
     def test_a_sixth_adapter_is_accepted_without_other_edits(self, tmp_path: Path) -> None:
-        adapters = REPO_ROOT / "stratarc" / "adapters"
+        adapters = PACKAGE_DIR / "adapters"
         fixture = tmp_path / "adapters"
         fixture.mkdir()
         for path in adapters.glob("*.py"):

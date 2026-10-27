@@ -12,6 +12,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
+from conftest import PACKAGE_DIR
 
 from stratarc.adapters._common import owned_dir_entries
 from stratarc.adapters._text import strip_jsonc_comments
@@ -621,7 +622,7 @@ class TestIdempotent(unittest.TestCase):
 
 
 class TestCanonicalOpenCodeBridge(unittest.TestCase):
-    BRIDGE = Path(__file__).resolve().parents[1] / "stratarc" / "data" / "hooks" / "opencode-runtime-hooks.ts"
+    BRIDGE = PACKAGE_DIR / "data" / "hooks" / "opencode-runtime-hooks.ts"
 
     def source(self):
         return self.BRIDGE.read_text()

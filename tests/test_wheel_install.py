@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from conftest import REPO_ROOT, tree_snapshot
+from conftest import PACKAGE_DIR, REPO_ROOT, tree_snapshot
 
-TEMPLATE = REPO_ROOT / "stratarc" / "data" / "templates" / "source-root"
+TEMPLATE = PACKAGE_DIR / "data" / "templates" / "source-root"
 
 
 def _run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:

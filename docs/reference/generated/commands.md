@@ -178,8 +178,7 @@ stratarc reconcile [--check]
 check a source root against the schemas and the engine's rules.
 
 ```text
-usage: stratarc validate [-h] [--root ROOT] [--strict]
-                         [--checks {generic,private,all}]
+usage: stratarc validate [-h] [--root ROOT] [--strict] [--checks {generic,private,all}]
 
 options:
   -h, --help            show this help message and exit
@@ -200,10 +199,7 @@ examples:
 deliver projects-root/ into the managed project checkouts.
 
 ```text
-usage: stratarc projects [-h] [--check] [--only NAME] [--adopt NAME]
-                         [--verify] [--new NAME] [--checkout PATH]
-                         [--remote OWNER/REPO] [--public] [--workflows]
-                         [--dry-run] [--registry-check] [--root PATH]
+usage: stratarc projects [-h] [--check] [--only NAME] [--adopt NAME] [--verify] [--new NAME] [--checkout PATH] [--remote OWNER/REPO] [--public] [--workflows] [--dry-run] [--registry-check] [--root PATH]
 
 options:
   -h, --help           show this help message and exit
@@ -255,10 +251,7 @@ examples:
 render or check the rules digest in instruction files.
 
 ```text
-usage: stratarc gen-rules-digest [-h] (--print | --embed FILE [FILE ...] |
-                                 --check FILE [FILE ...])
-                                 [--rules-root RULES_ROOT] [--prefix PREFIX]
-                                 [--source-root SOURCE_ROOT] [--column COLUMN]
+usage: stratarc gen-rules-digest [-h] (--print | --embed FILE [FILE ...] | --check FILE [FILE ...]) [--rules-root RULES_ROOT] [--prefix PREFIX] [--source-root SOURCE_ROOT] [--column COLUMN]
 
 options:
   -h, --help            show this help message and exit
@@ -313,9 +306,7 @@ examples:
 report where checkouts differ from what the control plane delivers.
 
 ```text
-usage: stratarc drift [-h] [--format {text,json}] [--report] [--here]
-                      [--staged] [--repo] [--source] [--root PATH]
-                      {explain} ...
+usage: stratarc drift [-h] [--format {text,json}] [--report] [--here] [--staged] [--repo] [--source] [--root PATH] {explain} ...
 
 options:
   -h, --help            show this help message and exit

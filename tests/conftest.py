@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib.util
+import os
 import shutil
 import subprocess
 import sys
@@ -15,6 +17,10 @@ SKIP_STATUS = 77
 # Make the checkout importable without installing it.
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+# The package under test: the checkout's source tree when it is present, the installed wheel when the release job has removed the source tree.
+_spec = importlib.util.find_spec("stratarc")
+PACKAGE_DIR = Path(_spec.origin).resolve().parent if _spec and _spec.origin else REPO_ROOT / "stratarc"
 
 
 def tree_snapshot(root: Path) -> dict[str, bytes]:
@@ -91,8 +97,9 @@ class ExternalTestItem(pytest.Item):
         self.add_marker(marker)
 
     def runtest(self) -> None:
+        env = {**os.environ, "STRATARC_PACKAGE_DIR": str(PACKAGE_DIR)}
         result = subprocess.run(
-            self.command, cwd=REPO_ROOT, capture_output=True, text=True, check=False
+            self.command, cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False
         )
         if result.returncode == SKIP_STATUS:
             # A test that cannot run on this machine says why on stderr and exits 77, the status make and automake use.

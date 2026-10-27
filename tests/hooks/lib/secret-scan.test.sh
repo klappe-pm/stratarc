@@ -5,7 +5,9 @@
 
 set -euo pipefail
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../stratarc/data/hooks/lib" && pwd)"
+# The conftest runner names the package under test; run by hand, the checkout is used.
+PACKAGE="${STRATARC_PACKAGE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../stratarc" && pwd)}"
+DIR="$(cd "$PACKAGE/data/hooks/lib" && pwd)"
 # shellcheck source=secret-scan.sh
 source "$DIR/secret-scan.sh"
 

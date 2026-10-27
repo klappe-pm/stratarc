@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from conftest import PACKAGE_DIR
 import os
 import tempfile
 import unittest
@@ -446,7 +447,7 @@ class TestOwnedDirDataclass(unittest.TestCase):
         self.assertEqual(od.exclude, frozenset())
 
 
-ADAPTERS_DIR = Path(__file__).resolve().parents[1] / "stratarc" / "adapters"
+ADAPTERS_DIR = PACKAGE_DIR / "adapters"
 SIXTH_ADAPTER = (Path(__file__).resolve().parent / "fixtures" / "adapters" / "registry" / "sixth.py").read_text()
 
 

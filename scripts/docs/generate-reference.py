@@ -182,7 +182,8 @@ def _module_help(name: str) -> str | None:
         return None
     # Keep the usage block and the option list; the module's description is prose that belongs in a page of its own.
     blocks = text.split("\n\n")
-    usage = blocks[0]
+    # argparse wraps the usage line differently from one Python release to the next, so join it to keep the page the same on every supported version.
+    usage = " ".join(blocks[0].split())
     rest = text[text.index("options:"):] if "options:" in text else ""
     return "\n\n".join(part for part in (usage, rest) if part)
 

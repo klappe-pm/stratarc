@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 
 from stratarc.config import Config, ConfigError, load_config
-from conftest import REPO_ROOT
+from conftest import PACKAGE_DIR, REPO_ROOT
 
-TEMPLATE = REPO_ROOT / "stratarc" / "data" / "templates" / "source-root"
+TEMPLATE = PACKAGE_DIR / "data" / "templates" / "source-root"
 EXAMPLE = REPO_ROOT / "examples" / "notes-cli" / "source"
 RUNTIMES = {"claude", "codex", "gemini", "cursor", "opencode"}
 

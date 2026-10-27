@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import PACKAGE_DIR
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DOCS = REPO_ROOT / "docs"
 GENERATOR = REPO_ROOT / "scripts" / "docs" / "generate-reference.py"
@@ -98,6 +100,9 @@ def test_every_relative_link_resolves(path):
             continue
         name, _, fragment = target.partition("#")
         resolved = (path.parent / name).resolve() if name else path
+        if not resolved.exists() and resolved.is_relative_to(REPO_ROOT / "stratarc"):
+            # The release job removes the checkout's package and tests the installed wheel, so a link into the source tree resolves against the installed package.
+            resolved = PACKAGE_DIR / resolved.relative_to(REPO_ROOT / "stratarc")
         assert resolved.exists(), f"{path.relative_to(REPO_ROOT)} links to {target}, which does not exist"
         if fragment and resolved.suffix == ".md":
             assert fragment in anchors(resolved), f"{path.relative_to(REPO_ROOT)} links to {target}, which has no such heading"

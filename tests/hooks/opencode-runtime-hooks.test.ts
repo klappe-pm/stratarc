@@ -85,7 +85,7 @@ beforeAll(async () => {
   writeFileSync(join(hookDir, "hooks.json"), JSON.stringify(REGISTRY))
   for (const name of HOOKS) writeFileSync(join(hookDir, name), fakeHook(name), { mode: 0o755 })
   // The bridge reads HOME once, when it is imported.
-  bridge = (await import("../../stratarc/data/hooks/opencode-runtime-hooks.ts")).StratarcHooks
+  bridge = (await import(join(process.env.STRATARC_PACKAGE_DIR ?? join(import.meta.dir, "../../stratarc"), "data/hooks/opencode-runtime-hooks.ts"))).StratarcHooks
 })
 
 afterAll(() => {
