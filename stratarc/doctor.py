@@ -145,6 +145,8 @@ def permissions_table() -> list[dict]:
         _row("reconcile", [_SOURCE, _CHECKOUTS], ["control-plane.md", "the control plane snapshot in each active project"]),
         _row("validate", [_SOURCE], []),
         _row("projects", [_SOURCE, _CHECKOUTS], [_CHECKOUTS], runs=["git, to read a checkout's state"]),
+        _row("drift", [_SOURCE, _CHECKOUTS], [], runs=["git, to read a checkout's state"]),
+        _row("drift --report", [_SOURCE, _CHECKOUTS], [_HOME + " (drift report)"], runs=["git, to read a checkout's state"]),
         _row("gen-rules-digest", [_SOURCE], ["the marked block in the files named"]),
         _row("components", [_SOURCE], []),
         _row("adapter list|show|status", [_HOME, _TARGETS], [], runs=["each runtime's --version, for status"]),

@@ -46,6 +46,7 @@ Global options are accepted before or after the command.
 | [`projects`](#projects) | deliver projects-root/ into the managed project checkouts |
 | [`gen-rules-digest`](#gen-rules-digest) | render or check the rules digest in instruction files |
 | [`components`](#components) | validate components.json and list what it declares |
+| [`drift`](#drift) | report where checkouts differ from what the control plane delivers |
 | [`adapter`](#adapter) | manage the translators from the source to a runtime |
 
 ## `help`
@@ -277,6 +278,27 @@ examples:
   stratarc components                                   validate the manifest
   stratarc components --list                            validate, then list each component
   stratarc components --manifest ./components.json      validate a manifest at another path
+```
+
+## `drift`
+
+report where checkouts differ from what the control plane delivers.
+
+```text
+usage: stratarc drift [-h] [--format {text,json}] [--report] [--root PATH]
+
+options:
+  -h, --help            show this help message and exit
+  --format {text,json}  output format (default: text)
+  --report              also write a Markdown report and a dated copy under
+                        the state home
+  --root PATH           the source root (default: $STRATARC_SOURCE, then the
+                        nearest stratarc.toml, then the current directory)
+
+examples:
+  stratarc drift
+  stratarc drift --format json
+  stratarc drift --report
 ```
 
 ## `adapter`
