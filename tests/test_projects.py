@@ -1109,12 +1109,164 @@ def test_an_identical_unrecorded_skill_is_not_claimed_or_pruned(world, skills):
     assert own.is_file()
 
 
+@pytest.mark.parametrize("relative", [SKILL, AGENTS_SKILL])
+def test_selected_skill_keeps_project_edits_and_the_original_delivery_hash(world, skills, relative):
+    """A selected skill must not overwrite an edited delivery or lose its protection on a later sync."""
+    sync_skills(world)
+    original_hash = manifest_of(skills)["hashes"][relative.as_posix()]
+    edited = skills / relative
+    edited.write_text("project edit\n")
+    (source_skill(world) / "SKILL.md").write_text("new source\n")
+
+    manifest_before = (skills / projects.delivered_manifest()).read_bytes()
+    assert f"write {edited}" not in sync_skills(world, dry=True)
+    assert (skills / projects.delivered_manifest()).read_bytes() == manifest_before
+    sync_skills(world)
+    assert edited.read_text() == "project edit\n"
+    assert manifest_of(skills)["hashes"][relative.as_posix()] == original_hash
+    other = AGENTS_SKILL if relative == SKILL else SKILL
+    assert (skills / other).read_text() == "new source\n"
+    assert verify_skills(world) == ([], [f"proj: {relative.as_posix()} is locally edited since delivery, kept"])
+    sync_skills(world)
+    assert edited.read_text() == "project edit\n"
+    set_plane(world, skill_plane(skills=False))
+    sync_skills(world)
+    assert edited.read_text() == "project edit\n"
+
+
+@pytest.mark.parametrize("tree", [".claude", ".agents"])
+@pytest.mark.parametrize("link_kind", ["file", "directory", "broken", "broken-directory", "skills-root"])
+def test_skill_delivery_does_not_follow_destination_symlinks(world, skills, tmp_path, tree, link_kind, monkeypatch):
+    sync_skills(world)
+    skill_dir = skills / tree / "skills" / "local-skill"
+    external = tmp_path / "external"
+    external.mkdir()
+    outside = external / "local-skill" / "SKILL.md" if link_kind == "skills-root" else external / "SKILL.md"
+    outside.parent.mkdir(parents=True, exist_ok=True)
+    outside.write_bytes((source_skill(world) / "SKILL.md").read_bytes())
+    outside_before = outside.read_bytes()
+    if link_kind == "skills-root":
+        link = skill_dir.parent
+        shutil.rmtree(link)
+        link.symlink_to(external, target_is_directory=True)
+    elif link_kind in ("directory", "broken-directory"):
+        shutil.rmtree(skill_dir)
+        skill_dir.symlink_to(external if link_kind == "directory" else external / "absent", target_is_directory=True)
+        link = skill_dir
+    else:
+        link = skill_dir / "SKILL.md"
+        link.unlink()
+        link.symlink_to(outside if link_kind == "file" else external / "absent")
+    (source_skill(world) / "SKILL.md").write_text("new source\n")
+    original_read = Path.read_bytes
+
+    def checked_read(path):
+        assert path != link and link not in path.parents
+        return original_read(path)
+
+    with monkeypatch.context() as guard:
+        guard.setattr(Path, "read_bytes", checked_read)
+        sync_skills(world, dry=True)
+        sync_skills(world)
+        verify_skills(world)
+    assert link.is_symlink()
+    assert outside.read_bytes() == outside_before
+    assert not (external / "absent").exists()
+    set_plane(world, skill_plane(skills=False))
+    with monkeypatch.context() as guard:
+        guard.setattr(Path, "read_bytes", checked_read)
+        sync_skills(world)
+    assert link.is_symlink()
+    assert outside.read_bytes() == outside_before
+
+
+@pytest.mark.parametrize("tree", [".claude", ".agents"])
+def test_a_symlinked_runtime_ancestor_refuses_project_delivery(world, skills, tmp_path, tree):
+    sync_skills(world)
+    external = tmp_path / "external"
+    external.mkdir()
+    ancestor = skills / tree
+    shutil.rmtree(ancestor)
+    ancestor.symlink_to(external, target_is_directory=True)
+    with pytest.raises(projects.ProjectRefused, match="symlink"):
+        sync_skills(world)
+    assert ancestor.is_symlink()
+    assert not list(external.iterdir())
+
+
+def test_symlinked_delivery_manifest_is_not_read_or_written(world, skills, tmp_path, monkeypatch):
+    sync_skills(world)
+    manifest = skills / projects.delivered_manifest()
+    manifest.unlink()
+    external = write(tmp_path / "outside.json", "outside content\n")
+    manifest.symlink_to(external)
+    original_read = Path.read_text
+
+    def checked_read(path, *args, **kwargs):
+        assert path != manifest
+        return original_read(path, *args, **kwargs)
+
+    with monkeypatch.context() as guard:
+        guard.setattr(Path, "read_text", checked_read)
+        with pytest.raises(projects.ProjectRefused, match="symlink"):
+            sync_skills(world)
+        assert "delivery manifest path contains a symlink" in verify_skills(world)[1][0]
+    assert manifest.is_symlink()
+    assert external.read_text() == "outside content\n"
+
+
+@pytest.mark.parametrize("relative", [SKILL, AGENTS_SKILL])
+def test_paths_only_skill_entry_remains_protected_when_selected_and_removed(world, skills, relative):
+    sync_skills(world)
+    paths_only(skills)
+    edited = skills / relative
+    edited.write_text("unverifiable local content\n")
+    (source_skill(world) / "SKILL.md").write_text("new source\n")
+    sync_skills(world)
+    assert edited.read_text() == "unverifiable local content\n"
+    assert relative.as_posix() in manifest_of(skills)["paths"]
+    sync_skills(world)
+    set_plane(world, skill_plane(skills=False))
+    sync_skills(world)
+    assert edited.read_text() == "unverifiable local content\n"
+    sync_skills(world)
+    assert edited.read_text() == "unverifiable local content\n"
+
+
+@pytest.mark.parametrize("relative", [SKILL, AGENTS_SKILL])
+def test_paths_only_skill_entry_is_not_pruned_before_any_new_delivery(world, skills, relative):
+    sync_skills(world)
+    paths_only(skills)
+    edited = skills / relative
+    edited.write_text("unverifiable local content\n")
+    set_plane(world, skill_plane(skills=False))
+    sync_skills(world)
+    sync_skills(world)
+    assert edited.read_text() == "unverifiable local content\n"
+    assert relative.as_posix() in manifest_of(skills)["paths"]
+
+
+@pytest.mark.parametrize("relative", [SKILL, AGENTS_SKILL])
+def test_missing_paths_only_skill_is_reported_and_restored(world, skills, relative):
+    sync_skills(world)
+    paths_only(skills)
+    missing = skills / relative
+    missing.unlink()
+    assert f"proj: {relative.as_posix()} is missing" in verify_skills(world)[0]
+    assert f"write {missing}" in sync_skills(world, dry=True)
+    assert not missing.exists()
+    sync_skills(world)
+    assert missing.read_bytes() == (source_skill(world) / "SKILL.md").read_bytes()
+    expected = hashlib.sha256(missing.read_bytes()).hexdigest()
+    assert manifest_of(skills)["hashes"][relative.as_posix()] == projects._manifest_hash(expected)
+
+
 def test_verify_exit_code_counts_skill_drift(world, skills, capsys):
     sync_skills(world)
     capsys.readouterr()
     assert projects.main(["--verify", "--skip-reconcile"]) == 0, capsys.readouterr().out
     capsys.readouterr()
-    (skills / AGENTS_SKILL).write_text("stale\n")
+    (source_skill(world) / "SKILL.md").write_text("new source\n")
     assert projects.main(["--verify", "--skip-reconcile"]) == 1
     assert f"verify: skill proj: {AGENTS_SKILL.as_posix()} is changed from source" in capsys.readouterr().out
 
@@ -1136,12 +1288,14 @@ def test_verify_reports_missing_changed_and_extra_skill_files(world, skills):
     drift, notes = verify_skills(world)
     assert sorted(drift) == sorted(
         [
-            f"proj: {SKILL.as_posix()} is changed from source",
             f"proj: {REFERENCE.as_posix()} is extra, not in source",
             "proj: .agents/skills/local-skill/references/notes.md is extra, not in source",
         ]
     )
-    assert notes == ["proj: .claude/skills/local-skill/scratch.md is the project's own, inside a delivered skill"]
+    assert notes == [
+        f"proj: {SKILL.as_posix()} is locally edited since delivery, kept",
+        "proj: .claude/skills/local-skill/scratch.md is the project's own, inside a delivered skill",
+    ]
     (skills / AGENTS_SKILL).unlink()
     assert f"proj: {AGENTS_SKILL.as_posix()} is missing" in verify_skills(world)[0]
     own = write(skills / ".claude" / "skills" / "handmade" / "SKILL.md", "# handmade\n")
@@ -1334,7 +1488,7 @@ def test_adopt_skips_a_shared_skill_changed_at_source_in_a_paths_only_manifest(w
         in acts
     )
     sync_skills(world)
-    assert (skills / ".claude" / "skills" / "shared" / "SKILL.md").read_text() == "# shared updated at source\n"
+    assert (skills / ".claude" / "skills" / "shared" / "SKILL.md").read_text() == "# shared original\n"
 
 
 def test_adopt_captures_a_skill_edited_only_in_the_agents_tree(world, skills):

@@ -654,9 +654,10 @@ def skill_drift(cp) -> list[str]:
     changed from source, and an extra file the stage does not ship at a path
     the prune removes (the engine delivered it, or, before a hashed manifest,
     could have). notes is what no sync changes and so never fails --verify:
-    a formerly delivered file kept because the project edited it, and a file
-    the project added inside a delivered skill directory. A skill directory
-    the engine never delivered is the project's own and is not compared.
+    an unrecorded collision, a delivered file kept because the project edited
+    it, and a file the project added inside a delivered skill directory. A
+    skill directory the engine never delivered is the project's own and is
+    not compared.
     """
     drift: list[str] = []
     notes: list[str] = []
@@ -665,6 +666,9 @@ def skill_drift(cp) -> list[str]:
             continue
         dst, _why = resolve(name, cp)
         if dst is None:
+            continue
+        if (dst / ".claude").is_symlink() or (dst / delivered_manifest()).is_symlink():
+            notes.append(f"{name}: delivery manifest path contains a symlink, skills not checked")
             continue
         src = build_stage(ROOT, cp, name)[0] if cp.rows else PROJECTS_SRC / name
         previous, hashed = _read_delivered(dst / delivered_manifest())
@@ -675,13 +679,33 @@ def skill_drift(cp) -> list[str]:
         for prefix in SKILL_TARGETS:
             recorded = _under(previous, prefix)
             known = claude_known if prefix == SKILL_TARGETS[0] else set(recorded)
-            _compare_skills(name, prefix, dst / prefix, skills_src, staged, known, recorded, drift, notes)
+            _compare_skills(name, prefix, dst, dst / prefix, skills_src, staged, known, recorded, drift, notes)
     return drift, notes
+
+
+def _symlink_in_path(root: pathlib.Path, path: pathlib.Path) -> bool:
+    """Whether a path below the checkout contains a symlink, including a broken link."""
+    current = root
+    for part in path.relative_to(root).parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
+def _path_missing(path: pathlib.Path) -> bool:
+    """Treat only a missing entry as absent; propagate other filesystem errors."""
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return True
+    return False
 
 
 def _compare_skills(
     name: str,
     prefix: str,
+    checkout: pathlib.Path,
     target: pathlib.Path,
     skills_src: pathlib.Path,
     staged: set[str],
@@ -691,16 +715,39 @@ def _compare_skills(
     notes: list[str],
 ) -> None:
     """One skill target tree of skill_drift, appended to *drift* and *notes*."""
+    if _symlink_in_path(checkout, target):
+        notes.append(f"{name}: {prefix} contains a symlink, kept")
+        return
     for rel in sorted(staged):
         path = target / rel
-        if not path.is_file():
+        if _symlink_in_path(checkout, path):
+            notes.append(f"{name}: {prefix}{rel} contains a symlink, kept")
+        elif _path_missing(path):
+            drift.append(f"{name}: {prefix}{rel} is missing")
+        elif rel in recorded and recorded[rel] is None:
+            notes.append(f"{name}: {prefix}{rel} has no delivery hash, kept")
+        elif not path.is_file():
             drift.append(f"{name}: {prefix}{rel} is missing")
         elif rel not in recorded:
             notes.append(f"{name}: {prefix}{rel} is a protected project collision, kept")
+        elif _locally_edited(path, recorded.get(rel)):
+            notes.append(f"{name}: {prefix}{rel} is locally edited since delivery, kept")
         elif path.read_bytes() != (skills_src / rel).read_bytes():
             drift.append(f"{name}: {prefix}{rel} is changed from source")
     staged_dirs = {rel.split("/", 1)[0] for rel in staged}
-    for rel in sorted(_files_under(target) - staged):
+    existing = []
+    if target.is_dir():
+        existing = [
+            f.relative_to(target).as_posix()
+            for f in target.rglob("*")
+            if not f.is_symlink() and f.is_file() and not _generated(f)
+        ]
+    for rel in sorted(existing):
+        if rel in staged:
+            continue
+        if rel in recorded and recorded[rel] is None:
+            notes.append(f"{name}: {prefix}{rel} has no delivery hash, kept")
+            continue
         if _locally_edited(target / rel, recorded.get(rel)):
             notes.append(f"{name}: {prefix}{rel} is locally edited since delivery, kept")
         elif rel in known:
@@ -937,6 +984,7 @@ def _prune(
     dry: bool,
     acts: list[str],
     recorded: dict[str, str | None],
+    protect_links: bool = False,
 ) -> tuple[set[str], dict[str, str]]:
     """Remove each file under *target* that the engine could ship there (a path
     in *known*) and the stage does not ship now. A cleared control-plane cell
@@ -958,7 +1006,7 @@ def _prune(
     if not target.is_dir():
         return gone, kept
     for f in sorted(target.rglob("*")):
-        if not f.is_file() or _generated(f):
+        if (protect_links and f.is_symlink()) or not f.is_file() or _generated(f):
             continue
         rel = f.relative_to(target).as_posix()
         if rel not in gone:
@@ -1338,6 +1386,11 @@ def sync_project(name: str, dry: bool, cp=None) -> list[str]:
     acts: list[str] = []
     if dst is None:
         return [why]
+    for directory in (".claude", ".agents"):
+        if (dst / directory).is_symlink():
+            raise ProjectRefused(f"{name}: {directory} is a symlink; project delivery refused")
+    if (dst / delivered_manifest()).is_symlink():
+        raise ProjectRefused(f"{name}: delivery manifest is a symlink; project delivery refused")
     _read_settings(dst / ".claude" / "settings.json", name)
     delivered_path = dst / delivered_manifest()
     previous, hashed = _read_delivered(delivered_path)
@@ -1349,6 +1402,7 @@ def sync_project(name: str, dry: bool, cp=None) -> list[str]:
     # project edited them, with the hash they were delivered with.
     delivered: dict[str, str] = {}
     retained: dict[str, str] = {}
+    retained_unhashed: dict[str, None] = {}
 
     def record(prefix: str, base: pathlib.Path, rels: set[str]) -> None:
         delivered.update({prefix + rel: _sha256(base / rel) for rel in rels})
@@ -1359,6 +1413,7 @@ def sync_project(name: str, dry: bool, cp=None) -> list[str]:
         could: set[str],
         staged: set[str],
         always_known: frozenset[str] | set[str] = frozenset(),
+        protect_skills: bool = False,
     ) -> set[str]:
         # With a hashed manifest the prune removes exactly what it records
         # as delivered; before one exists it also removes what the engine
@@ -1369,7 +1424,21 @@ def sync_project(name: str, dry: bool, cp=None) -> list[str]:
         # prefix's record predates that delivery or never covered it.
         recorded = _under(previous, prefix)
         known = (set(recorded) if hashed else could | set(recorded)) | always_known
-        gone, kept = _prune(target, known, staged, dry, acts, recorded)
+        if protect_skills:
+            for rel in tuple(known):
+                if (rel in recorded and recorded[rel] is None) or _symlink_in_path(dst, target / rel):
+                    known.discard(rel)
+                    if rel not in staged:
+                        _note(f"keep {short(target / rel)}, path is a symlink or delivery has no recorded hash")
+                    if rel in recorded:
+                        digest = recorded[rel]
+                        if digest is None:
+                            retained_unhashed[prefix + rel] = None
+                        else:
+                            retained[prefix + rel] = digest
+            if _symlink_in_path(dst, target):
+                return known - staged
+        gone, kept = _prune(target, known, staged, dry, acts, recorded, protect_links=protect_skills)
         retained.update({prefix + rel: digest for rel, digest in kept.items()})
         return gone
 
@@ -1421,11 +1490,37 @@ def sync_project(name: str, dry: bool, cp=None) -> list[str]:
                     for rel in _files_under(skill):
                         staged_rel = f"{skill.name}/{rel}"
                         out = dst / target / staged_rel
-                        if out.is_file() and target + staged_rel not in previous:
+                        digest = previous.get(target + staged_rel)
+                        if _symlink_in_path(dst, out):
+                            skill_collisions[target].add(staged_rel)
+                            collided.add(rel)
+                            if target + staged_rel in previous:
+                                if digest is None:
+                                    retained_unhashed[target + staged_rel] = None
+                                else:
+                                    retained[target + staged_rel] = digest
+                            _note(f"keep {short(out)}, path contains a symlink")
+                        elif target + staged_rel in previous and digest is None and not _path_missing(out):
+                            skill_collisions[target].add(staged_rel)
+                            collided.add(rel)
+                            retained_unhashed[target + staged_rel] = None
+                            _note(f"keep {short(out)}, delivery has no recorded hash")
+                        elif out.is_file() and target + staged_rel not in previous:
                             skill_collisions[target].add(staged_rel)
                             collided.add(rel)
                             print(
                                 f"{PROG}: note: collision {short(out)}: project file kept",
+                                file=sys.stderr,
+                            )
+                        # This protects edits observed here; copying remains a
+                        # separate path-based operation and is not atomic with
+                        # the check against a concurrent writer.
+                        elif digest is not None and _locally_edited(out, digest):
+                            skill_collisions[target].add(staged_rel)
+                            collided.add(rel)
+                            retained[target + staged_rel] = digest
+                            print(
+                                f"{PROG}: note: keep {short(out)}, locally edited since the engine delivered it",
                                 file=sys.stderr,
                             )
                     _copy_tree(
@@ -1456,7 +1551,7 @@ def sync_project(name: str, dry: bool, cp=None) -> list[str]:
         # manifest, so only .claude/skills/ has paths it could have shipped
         # without a record.
         could = known_skills if target == SKILL_TARGETS[0] else set()
-        prune(dst / target, target, could, staged_skills)
+        prune(dst / target, target, could, staged_skills, protect_skills=True)
 
     # Prune: anything under .claude/rules that the stage does not ship and that
     # the engine COULD ship (a name that exists in the source root's rules/,
@@ -1603,7 +1698,8 @@ def sync_project(name: str, dry: bool, cp=None) -> list[str]:
 
     _warn_on_gitignored_delivered_paths(name, dst, delivered)
 
-    # "paths" is what this run delivered; "hashes" covers those and every
+    # "paths" includes this run's deliveries and retained legacy entries
+    # whose delivery hash is unknown. "hashes" covers deliveries and every
     # retained locally edited file, so a kept file stays protected. Every
     # value written here carries the sha256- prefix (MANIFEST_HASH_PREFIX);
     # _read_delivered strips it back off, so this dict itself stays raw hex
@@ -1612,7 +1708,7 @@ def sync_project(name: str, dry: bool, cp=None) -> list[str]:
     _write_if_changed(
         delivered_path,
         (json.dumps({
-            "paths": sorted(delivered),
+            "paths": sorted(delivered.keys() | retained_unhashed.keys()),
             "hashes": {p: _manifest_hash(h) if isinstance(h, str) else h for p, h in hashes.items()},
             "project_plugins": sorted(managed_components[0]),
             "project_mcp_servers": sorted(managed_components[1]),
