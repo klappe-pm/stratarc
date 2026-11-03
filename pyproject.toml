@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "Kevin Lappe" }]
+authors = [{ name = "klappe-pm" }]
 keywords = ["ai-agents", "claude-code", "codex", "gemini-cli", "cursor", "opencode", "configuration", "dotfiles"]
 classifiers = [
     "Development Status :: 4 - Beta",
