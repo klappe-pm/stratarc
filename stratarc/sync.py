@@ -488,6 +488,9 @@ def detected(
 _REVERSE_PASS_HEADINGS = [
     ("orphan", "orphan"),
     ("retired", "retired"),
+    # An entry in an owned directory the deploy ledger never recorded:
+    # informational, never pruned.
+    ("unmanaged", "unmanaged"),
     ("excluded", "excluded"),
     ("foreign_hook_group", "foreign hook group"),
     ("dangling", "dangling registration"),
@@ -652,6 +655,7 @@ def reverse_pass(
     live: dict[str, tuple[str, pathlib.Path]],
     *,
     home: pathlib.Path | None = None,
+    ledger: dict[str, set[str]] | None = None,
 ) -> dict[str, list[Finding]]:
     """Classify everything present in every owned directory and hook
     registry of every live runtime, and, given a home, everything external.
@@ -674,6 +678,11 @@ def reverse_pass(
     environment and header value scanned for literal secrets. home is
     explicit so a fixture never reads the real machine; the sync passes
     the resolved home.
+
+    With ledger set (deploy_ledger.load()), an entry the current source
+    does not produce is an orphan only when the ledger records that a write
+    run deployed it; any other is unmanaged, which is reported and never
+    pruned. Without it, every such entry is an orphan, as before the ledger.
     """
     from stratarc.adapters._common import classify_registration, owned_dir_entries, source_hook_names
     from stratarc.adapters._inventory import hook_entry, machine_inventory, skill_entry
@@ -719,6 +728,9 @@ def reverse_pass(
                             )
                         continue
                     kind = "retired" if od.kind == "rule" and entry in retired else "orphan"
+                    if kind == "orphan" and ledger is not None and str(p) not in ledger.get(name, set()):
+                        items.append(Finding(name, "unmanaged", f"{p} (not in the deploy ledger; left in place)"))
+                        continue
                     items.append(Finding(name, kind, str(p), path=p))
 
         registry_name = registries.get(name)
@@ -881,14 +893,55 @@ def _remove_dangling_registrations(
     registry_path.write_text(json.dumps(data, indent=2) + "\n")
 
 
+def _record_deployed(adapter, name: str, stage: pathlib.Path, target: pathlib.Path) -> None:
+    """Add what this write run rendered into the runtime's owned directories to the deploy ledger."""
+    owner = getattr(adapter, "owned_outputs", None)
+    if owner is None:
+        return
+    from stratarc import deploy_ledger
+
+    deploy_ledger.record(name, deploy_ledger.produced_paths(owner(stage, target)))
+
+
+def _ownership_evidence(f: Finding) -> str:
+    """Why prune may delete what a finding names, printed beside it in a dry run."""
+    return {
+        "orphan": " (deployed by a recorded sync; the source no longer produces it)",
+        "retired": " (named in rules/retired.json)",
+        "dangling": " (its script does not exist)",
+        "returned": " (declared wanted: false in components.json)",
+    }.get(f.kind, "")
+
+
+def _prune_backup(f: Finding, live: dict[str, tuple[str, pathlib.Path]], backup_root: pathlib.Path) -> None:
+    """Copy what one finding names into the prune backup, keeping symlinks as links."""
+    assert f.path is not None
+    target = live.get(f.runtime, ("", None))[1]
+    try:
+        rel = f.path.relative_to(target) if target is not None else pathlib.Path(f.path.name)
+    except ValueError:
+        rel = pathlib.Path(f.path.name)
+    destination = backup_root / f.runtime / rel
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if f.path.is_dir() and not f.path.is_symlink():
+        shutil.copytree(f.path, destination, symlinks=True, dirs_exist_ok=True)
+    else:
+        shutil.copy2(f.path, destination, follow_symlinks=False)
+
+
 def run_prune(root: pathlib.Path, live: dict[str, tuple[str, pathlib.Path]], *, dry_run: bool) -> int:
     """Delete every orphan, retired and dangling-registration finding.
 
     Reverse-pass only: no forward sync, no project or permission sweep.
     A real run appends the list it is about to delete to
-    ~/.stratarc/telemetry/prune-<date>.txt before deleting anything,
-    so every run that day stays recoverable from the runtime's own history. A dry run
-    prints "would delete" lines and writes nothing.
+    ~/.stratarc/telemetry/prune-<date>.txt and copies every file it is about
+    to delete under ~/.stratarc/backups/prune/<run time>/<runtime>/ before
+    deleting anything. A dry run prints "would delete" lines, each with its
+    ownership evidence, and writes nothing.
+
+    An orphan is deleted only when the deploy ledger records that a write
+    run deployed it (stratarc/deploy_ledger.py); anything else in an owned
+    directory is unmanaged, named and left in place.
     """
     from stratarc.control_plane import ControlPlane
     from stratarc.staging import build_stage, cleanup_all
@@ -919,11 +972,19 @@ def run_prune(root: pathlib.Path, live: dict[str, tuple[str, pathlib.Path]], *, 
     if cp.rows:
         live = {k: v for k, v in live.items() if cp.enabled("global", f"runtime:{k}")}
 
+    from stratarc import deploy_ledger
+
     stage, _notes = build_stage(root, cp, "global")
     try:
-        findings = reverse_pass(root, stage, live, home=home())
+        findings = reverse_pass(root, stage, live, home=home(), ledger=deploy_ledger.load())
     finally:
         cleanup_all()
+
+    for f in sorted(
+        (f for items in findings.values() for f in items if f.kind == "unmanaged"),
+        key=lambda f: (f.runtime, f.label),
+    ):
+        print(f"sync: prune: not pruned {f.runtime}: unmanaged: {f.label}")
 
     # A returned skill or hook group is pruned like an orphan: a wanted: false
     # group is removed. A returned item in a runtime-native file this source
@@ -952,7 +1013,7 @@ def run_prune(root: pathlib.Path, live: dict[str, tuple[str, pathlib.Path]], *, 
 
     if dry_run:
         for f in sorted(to_delete, key=lambda f: (f.runtime, f.kind, f.label)):
-            print(f"sync: would delete {f.runtime}: {f.kind}: {f.label}")
+            print(f"sync: would delete {f.runtime}: {f.kind}: {f.label}{_ownership_evidence(f)}")
         return 0
 
     telemetry_dir = home() / ".stratarc" / "telemetry"
@@ -963,23 +1024,43 @@ def run_prune(root: pathlib.Path, live: dict[str, tuple[str, pathlib.Path]], *, 
     # erase the list that makes the first one recoverable. Each run opens
     # with its own timestamped header line.
     run_at = datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()
+    # Every file prune deletes is copied here first, under its runtime and
+    # its path inside that runtime's target, so it can be copied back.
+    # A registration prune removes is recoverable from the list itself.
+    backup_root = home() / ".stratarc" / "backups" / "prune" / run_at.replace(":", "")
+    suffix = 1
+    while backup_root.exists():
+        suffix += 1
+        backup_root = backup_root.with_name(f"{run_at.replace(':', '')}-{suffix}")
+    backed_up = False
+    for f in to_delete:
+        if f.path is not None and (f.path.exists() or f.path.is_symlink()):
+            _prune_backup(f, live, backup_root)
+            backed_up = True
     with telemetry_path.open("a", encoding="utf-8") as handle:
         handle.write(
             f"# prune run {run_at}\n"
+            + (f"# backup {backup_root}\n" if backed_up else "")
             + "".join(
                 f"{f.runtime} {f.kind} {f.label}\n"
                 for f in sorted(to_delete, key=lambda f: (f.runtime, f.kind, f.label))
             )
         )
     print(f"sync: prune: appended to {short(telemetry_path)}")
+    if backed_up:
+        print(f"sync: prune: copies of the deleted files are in {short(backup_root)}")
 
+    deleted: dict[str, list[str]] = {}
     for f in to_delete:
         if f.kind in ("orphan", "retired", "returned") and f.path is not None:
             if f.path.is_dir() and not f.path.is_symlink():
                 shutil.rmtree(f.path)
             elif f.path.exists() or f.path.is_symlink():
                 f.path.unlink()
+            deleted.setdefault(f.runtime, []).append(str(f.path))
             print(f"sync: {f.runtime}: deleted {f.label}")
+    for runtime, paths in deleted.items():
+        deploy_ledger.forget(runtime, paths)
 
     by_registry: dict[pathlib.Path, list[Finding]] = {}
     for f in to_delete:
@@ -1391,6 +1472,8 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
             # --check stale.
             for line in component_notes(stage, name):
                 print(f"sync: {name}: {line}")
+            if not read_only:
+                _record_deployed(adapter, name, stage, target)
             if not actions:
                 print(f"sync: {name}: current")
                 if not read_only:
@@ -1421,7 +1504,9 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
         # Computed from the same stage the forward pass just used, so a
         # control-plane-disabled item is never mistaken for an orphan.
         if args.check:
-            reverse_findings = reverse_pass(root, stage, live, home=home())
+            from stratarc import deploy_ledger
+
+            reverse_findings = reverse_pass(root, stage, live, home=home(), ledger=deploy_ledger.load())
     finally:
         cleanup_all()
 

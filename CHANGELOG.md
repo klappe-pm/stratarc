@@ -19,6 +19,7 @@ All notable changes to this project are documented in this file. The format foll
 
 - Project skill delivery no longer overwrites a file a project edited after delivery, keeps the original delivery hash so the file stays protected, and keeps legacy manifest entries that have no hash.
 - Project delivery refuses a symlinked `.claude`, `.agents` or delivery manifest, and skill delivery, pruning and `--verify` no longer follow a symlink at or above a skill path.
+- `prune` deletes a file in an owned directory only when the new deploy ledger (`~/.stratarc/state/deployed.json`, written by every sync) records that Stratarc deployed it, so a command, prompt or agent made by hand is reported as `unmanaged` and kept. The dry run names the evidence for each removal, and a real prune copies every deleted file to `~/.stratarc/backups/prune/` first.
 - OpenCode hooks at a nondefault target run that target's registry and scripts: the bridge reads the registry beside the plugins directory it was installed into, the registry names the target's hooks directory (shell-quoted, so a path with spaces works), and a missing or malformed registry is reported on stderr instead of silently running nothing.
 - The OpenCode bridge checks an `apply_patch` call once per affected file, move destinations and deletions included, with the operation and the whole patch in each payload, so a hook denying a second or deleted file blocks the call. A patch it cannot read blocks instead of being checked in part.
 

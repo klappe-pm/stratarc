@@ -14,7 +14,7 @@ cd ~/stratarc-source && stratarc diff
 cd ~/stratarc-source && stratarc check
 ```
 
-`check` makes the same comparison and exits 6 when anything is out of date. It also reports what each runtime holds that the source does not own: orphan files, hook groups another tool registered, and literal secrets found in a runtime's files. Use it in a script or a pre-push step.
+`check` makes the same comparison and exits 6 when anything is out of date. It also reports what each runtime holds that the source does not own: orphan files (deployed by an earlier `sync`, no longer produced), unmanaged files (never recorded as deployed, left alone), hook groups another tool registered, and literal secrets found in a runtime's files. Use it in a script or a pre-push step.
 
 ## Deploy
 
@@ -46,7 +46,9 @@ cd ~/stratarc-source && stratarc prune --dry-run
 cd ~/stratarc-source && stratarc prune
 ```
 
-`prune` removes only paths Stratarc owns, such as `commands/`, `prompts/` and `rules/`, and only files the current source does not produce. A command you installed into a runtime by hand stays. It writes the list of what it removed to `~/.stratarc/telemetry/` first.
+`prune` removes only paths in directories Stratarc owns, such as `commands/`, `prompts/`, `agents/` and `rules/`, and only files the current source does not produce and an earlier `sync` recorded deploying. Every write run adds what it rendered to the deploy ledger, `~/.stratarc/state/deployed.json`; a file the ledger never recorded is unmanaged, so a command you installed into a runtime by hand stays, and `prune --dry-run` names it under `unmanaged` beside each removal and the evidence for it. A rule named in `rules/retired.json`, a hook registration whose script is missing, and a component `components.json` declares `wanted: false` are removed on that evidence instead.
+
+Before deleting anything, `prune` appends the list to `~/.stratarc/telemetry/prune-<date>.txt` and copies each file it deletes to `~/.stratarc/backups/prune/<run time>/<runtime>/`, under its path inside the runtime's target. To recover a file, copy it back from there. A home written by a release before the ledger existed has recorded nothing, so `prune` keeps every such file until a `sync` has run; delete a file the source dropped before then by hand.
 
 ## Verify After the Write
 

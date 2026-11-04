@@ -40,7 +40,7 @@ Everything is read when a command runs, never when the module is imported, so a 
 
 ## The Home Directory
 
-Stratarc keeps machine state, not project state, in `~/.stratarc`: `config.toml` (settings such as `logging`, and `source_root`, the source root `stratarc setup` recorded), `adapters/` (registered adapter manifests), `state/`, `backups/`, `logs/` and `cache/`. Directories are mode 0700 and files 0600. A file written by a newer Stratarc is never rewritten by an older one. `stratarc doctor --clean` removes only old backups and the cache.
+Stratarc keeps machine state, not project state, in `~/.stratarc`: `config.toml` (settings such as `logging`, and `source_root`, the source root `stratarc setup` recorded), `adapters/` (registered adapter manifests), `state/` (including `deployed.json`, the deploy ledger `prune` reads), `backups/` (including `backups/prune/`, a copy of every file `prune` deleted, which `doctor --clean` keeps), `logs/` and `cache/`. Directories are mode 0700 and files 0600. A file written by a newer Stratarc is never rewritten by an older one. `stratarc doctor --clean` removes only old backups and the cache.
 
 ## Schemas
 
