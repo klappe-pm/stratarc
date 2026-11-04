@@ -206,3 +206,66 @@ describe("registry", () => {
     }
   })
 })
+
+describe("apply_patch", () => {
+  const PATCH = [
+    "*** Begin Patch",
+    "*** Add File: docs/new.md",
+    "+hello",
+    "*** Update File: src/a.ts",
+    "*** Move to: src/b.ts",
+    "@@",
+    "-old",
+    "+new",
+    "*** Delete File: secrets/key.pem",
+    "*** End Patch",
+  ].join("\n")
+
+  test("every affected path, a move's destination included, is checked with its operation", async () => {
+    const hooks = await plugin()
+    await hooks["tool.execute.before"]({ tool: "apply_patch", sessionID: "s1" }, { args: { patchText: PATCH } })
+    const seen = calls("edit-gate.sh")
+    expect(seen.map((call) => (call.tool_input as Record<string, unknown>).file_path)).toEqual(["docs/new.md", "src/a.ts", "src/b.ts", "secrets/key.pem"])
+    expect(seen.map((call) => (call.tool_input as Record<string, unknown>).operation)).toEqual(["add", "update", "update", "delete"])
+    expect(seen[0]).toMatchObject({ tool_name: "Write", tool_input: { content: "hello", patch_text: PATCH } })
+    expect(seen[2]).toMatchObject({ tool_input: { move_from: "src/a.ts", content: "new" } })
+    expect((seen[3].tool_input as Record<string, unknown>).files).toHaveLength(3)
+  })
+
+  test("a hook that denies a later file in the patch blocks the call", async () => {
+    // The gate denies only the payload naming the protected path.
+    writeFileSync(join(hookDir, "edit-gate.sh"), [
+      "#!/bin/bash",
+      "input=$(cat)",
+      `printf '%s\\n' "$input" >> '${join(logDir, "edit-gate.sh")}.log'`,
+      'case "$input" in *\'"file_path":"secrets/\'*) printf \'{"hookSpecificOutput":{"permissionDecision":"deny","permissionDecisionReason":"protected path"}}\' ;; esac',
+      "",
+    ].join("\n"), { mode: 0o755 })
+    try {
+      const hooks = await plugin()
+      await expect(hooks["tool.execute.before"]({ tool: "apply_patch", sessionID: "s1" }, { args: { patchText: PATCH } })).rejects.toThrow("protected path")
+    } finally {
+      writeFileSync(join(hookDir, "edit-gate.sh"), fakeHook("edit-gate.sh"), { mode: 0o755 })
+    }
+  })
+
+  test("a patch the bridge cannot read blocks before the call instead of being reduced", async () => {
+    const hooks = await plugin()
+    await expect(hooks["tool.execute.before"]({ tool: "apply_patch", sessionID: "s1" }, { args: { patchText: "*** Begin Patch\n*** Rename File: a\n*** End Patch" } })).rejects.toThrow("cannot check apply_patch")
+    await expect(hooks["tool.execute.before"]({ tool: "apply_patch", sessionID: "s1" }, { args: { patchText: "" } })).rejects.toThrow("names no file")
+    expect(called()).toEqual([])
+  })
+
+  test("after the call, an unreadable patch reaches the hooks raw with the reason", async () => {
+    const hooks = await plugin()
+    await hooks["tool.execute.after"]({ tool: "apply_patch", sessionID: "s1", args: { patchText: "garbage" } })
+    expect(calls("after.sh")[0]).toMatchObject({ tool_name: "Write", tool_input: { patch_text: "garbage", parse_error: "the patch names no file" } })
+  })
+
+  test("a single Write still sends one payload in Claude Code's shape", async () => {
+    const hooks = await plugin()
+    await hooks["tool.execute.before"]({ tool: "write", sessionID: "s1" }, { args: { filePath: "/x/a.md", content: "hi" } })
+    expect(calls("edit-gate.sh")).toHaveLength(1)
+    expect(calls("edit-gate.sh")[0].tool_input).toEqual({ file_path: "/x/a.md", content: "hi" })
+  })
+})

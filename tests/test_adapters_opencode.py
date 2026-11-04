@@ -637,9 +637,9 @@ class TestCanonicalOpenCodeBridge(unittest.TestCase):
         source = self.source()
         self.assertIn('"tool.execute.before": async (input:', source)
         self.assertIn('"tool.execute.after": async (input:', source)
-        self.assertIn('dispatch(registry, "PreToolUse"', source)
-        self.assertIn('dispatch(registry, "PostToolUse"', source)
-        self.assertIn("editedInput(tool, args)", source)
+        self.assertIn('dispatchTool(registry, "PreToolUse"', source)
+        self.assertIn('dispatchTool(registry, "PostToolUse"', source)
+        self.assertIn('editedInputs(tool, args, event === "PreToolUse")', source)
 
     def test_a_new_session_dispatches_session_start_and_a_child_session_does_not(self):
         source = self.source()
