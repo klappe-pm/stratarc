@@ -2,7 +2,7 @@
   <a href="https://github.com/klappe-pm/stratarc"><img src="https://raw.githubusercontent.com/klappe-pm/stratarc/main/.github/stratarc-banner.svg" alt="A terminal window: stratarc sync is typed, the stratarc wordmark appears, and each runtime is checked off" width="760"></a>
 </p>
 
-<h1 align="center">Stratarc</h1>
+<h1 align="center">stratarc</h1>
 
 <p align="center">
   One agent configuration source, rendered into any agent runtime you use.
