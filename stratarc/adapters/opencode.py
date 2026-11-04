@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -394,7 +395,7 @@ def sync(source: Path, target: Path, dry_run: bool = False) -> list[str]:
         for rel in sorted(_owned_hook_names(source)):
             hook_file = hooks_src / rel
             destination = hooks_dst / rel
-            content = _hook_bytes(hook_file, rel)
+            content = _hook_bytes(hook_file, rel, target)
             if destination.exists() and destination.read_bytes() == content:
                 continue
             if not dry_run:
@@ -447,13 +448,38 @@ def sync(source: Path, target: Path, dry_run: bool = False) -> list[str]:
     return actions
 
 
-def _hook_bytes(hook_file: Path, rel: str) -> bytes:
+_DEFAULT_HOOK_PREFIX = "$HOME/.config/opencode/hooks/"
+
+
+def hook_prefix(target: Path) -> str:
+    """The command prefix that names this target's hooks directory.
+
+    The default target keeps the portable $HOME form. Any other target is
+    written as its absolute hooks directory, shell-quoted so a path with
+    spaces survives `bash -c`, because the bridge installed there reads that
+    target's registry and $HOME would point every command at another
+    installation's scripts.
+    """
+    hooks_dir = Path(target).expanduser() / "hooks"
+    default = Path.home() / ".config" / "opencode" / "hooks"
+    try:
+        if hooks_dir.resolve() == default.resolve():
+            return _DEFAULT_HOOK_PREFIX
+    except OSError:
+        pass
+    return shlex.quote(str(hooks_dir) + "/")
+
+
+def _hook_bytes(hook_file: Path, rel: str, target: Optional[Path] = None) -> bytes:
     """What the target holds for one hook file. The registry's commands are
     written for Claude Code's hooks directory, so its paths are pointed at this
-    runtime's own."""
+    target's own (see hook_prefix)."""
     content = hook_file.read_bytes()
     if rel == "hooks.json":
-        content = content.replace(b"$HOME/.claude/hooks/", b"$HOME/.config/opencode/hooks/")
+        prefix = _DEFAULT_HOOK_PREFIX if target is None else hook_prefix(target)
+        # The prefix lands inside a JSON string, so it is JSON-escaped.
+        escaped = json.dumps(prefix)[1:-1].encode()
+        content = content.replace(b"$HOME/.claude/hooks/", escaped)
     return content
 
 

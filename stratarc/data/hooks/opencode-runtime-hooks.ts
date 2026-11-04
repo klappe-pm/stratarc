@@ -14,7 +14,20 @@
 // is skipped, so a missing optional hook never blocks a tool call.
 
 const home = process.env.HOME ?? ""
-const hookRoot = `${home}/.config/opencode/hooks`
+
+// The registry belongs to the installation this plugin was loaded from. An
+// installed bridge lives at <target>/plugins/, so its registry is
+// <target>/hooks/hooks.json, whatever target stratarc was configured with and
+// whatever HOME says. A copy loaded from anywhere else (the packaged source,
+// for one) falls back to the default target under HOME.
+function resolveHookRoot(): string {
+  const dir = ((import.meta as { dir?: string }).dir ?? "").replace(/\/+$/, "")
+  const slash = dir.lastIndexOf("/")
+  if (slash >= 0 && dir.slice(slash + 1) === "plugins") return `${dir.slice(0, slash)}/hooks`
+  return `${home}/.config/opencode/hooks`
+}
+
+const hookRoot = resolveHookRoot()
 
 type Args = Record<string, unknown>
 type Hook = { command?: string }
@@ -37,15 +50,23 @@ const TOOL_NAMES: Record<string, string> = {
   todowrite: "TodoWrite",
 }
 
+// A missing or unreadable registry is reported, so it is never mistaken for
+// an installation that registers no hooks on purpose (an empty object).
 async function loadRegistry(): Promise<Registry> {
-  const file = Bun.file(`${hookRoot}/hooks.json`)
-  if (!(await file.exists())) return {}
-  try {
-    const parsed = JSON.parse(await file.text())
-    return parsed && typeof parsed === "object" ? (parsed as Registry) : {}
-  } catch {
+  const path = `${hookRoot}/hooks.json`
+  const file = Bun.file(path)
+  if (!(await file.exists())) {
+    console.error(`stratarc hooks: no hook registry at ${path}; no hooks will run`)
     return {}
   }
+  try {
+    const parsed = JSON.parse(await file.text())
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Registry
+    console.error(`stratarc hooks: the hook registry at ${path} is not a JSON object; no hooks will run`)
+  } catch {
+    console.error(`stratarc hooks: the hook registry at ${path} is not valid JSON; no hooks will run`)
+  }
+  return {}
 }
 
 function matcherAccepts(matcher: string | undefined, tool: string | undefined): boolean {

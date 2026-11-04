@@ -16,7 +16,7 @@ This page is the reference for what Stratarc writes into the OpenCode target, `~
 | `opencode.jsonc`, `mcp` | `components.json` MCP servers | the servers Stratarc owns |
 | `rules/` | the rules outside the `common` tier | kept for inspection; the digest in `AGENTS.md` carries the rest |
 | `hooks/` | `hooks/*.sh` | executable bits kept |
-| `hooks/hooks.json` | `hooks/hooks.json` | the registry the plugin reads, with script paths pointing into `~/.config/opencode/hooks` |
+| `hooks/hooks.json` | `hooks/hooks.json` | the registry the plugin reads (the one beside the `plugins/` directory the bridge was installed into), with script paths pointing into the target's `hooks/` directory: `$HOME/.config/opencode/hooks/` at the default target, the quoted absolute path at any other |
 | `plugins/stratarc-hooks.ts` | the packaged bridge | runs the registered commands on OpenCode's events |
 | `skill/` | `skills/` | the `SKILL.md` format is the same |
 | `commands/` | `commands/*.md` | `argument-hint` and `allowed-tools` are dropped |

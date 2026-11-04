@@ -655,3 +655,95 @@ class TestCanonicalOpenCodeBridge(unittest.TestCase):
         source = self.source()
         self.assertIn("exitCode === 127", source)
         self.assertIn('permissionDecision === "deny"', source)
+
+
+# A fake hook that records the payload it was sent, so a test can tell which
+# installation's script a bridge actually ran.
+_RECORDING_HOOK = '#!/bin/bash\ncat >> "$(dirname "$0")/ran.log"\n'
+
+# Loads an installed bridge the way OpenCode does (a module in plugins/) and
+# sends it one Bash call.
+_BRIDGE_DRIVER = """
+const [plugin, worktree] = process.argv.slice(2)
+const hooks = await (await import(plugin)).StratarcHooks({ directory: worktree })
+await hooks["tool.execute.before"]({ tool: "bash", sessionID: "s1", callID: "c1" }, { args: { command: "ls" } })
+"""
+
+
+class TestCustomTargetHookPaths(unittest.TestCase):
+    """#15: a bridge installed at a nondefault target runs that target's hooks."""
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.home = Path.home()
+        self.source = self.root / "source"
+        (self.source / "hooks").mkdir(parents=True)
+        (self.source / "hooks" / "gate.sh").write_text(_RECORDING_HOOK)
+        (self.source / "hooks" / "gate.sh").chmod(0o755)
+        (self.source / "hooks" / "hooks.json").write_text(
+            json.dumps({"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/gate.sh"}]}]})
+        )
+        bridge = PACKAGE_DIR / "data" / "hooks" / "opencode-runtime-hooks.ts"
+        (self.source / "hooks" / "opencode-runtime-hooks.ts").write_bytes(bridge.read_bytes())
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def registry_command(self, target: Path) -> str:
+        registry = json.loads((target / "hooks" / "hooks.json").read_text())
+        return registry["PreToolUse"][0]["hooks"][0]["command"]
+
+    def test_the_default_target_keeps_the_portable_home_prefix(self):
+        target = self.home / ".config" / "opencode"
+        sync(self.source, target)
+        self.assertEqual(self.registry_command(target), "$HOME/.config/opencode/hooks/gate.sh")
+
+    def test_a_custom_target_names_its_own_hooks_directory_quoted(self):
+        target = self.root / "custom target"
+        sync(self.source, target)
+        self.assertEqual(self.registry_command(target), f"'{target}/hooks/'gate.sh")
+        # A second run over the same target converges: nothing to do.
+        self.assertEqual(sync(self.source, target), [])
+
+    @pytest.mark.skipif(__import__("shutil").which("bun") is None, reason="bun is not on PATH")
+    def test_the_installed_bridge_runs_the_custom_target_hook_not_the_default(self):
+        import subprocess
+
+        target = self.root / "custom target"
+        sync(self.source, target)
+        # A decoy installation at the default target, which must not run.
+        decoy = self.home / ".config" / "opencode" / "hooks"
+        decoy.mkdir(parents=True)
+        (decoy / "gate.sh").write_text(_RECORDING_HOOK)
+        (decoy / "gate.sh").chmod(0o755)
+        (decoy / "hooks.json").write_text((self.source / "hooks" / "hooks.json").read_text().replace("$HOME/.claude/hooks/", "$HOME/.config/opencode/hooks/"))
+        driver = self.root / "driver.ts"
+        driver.write_text(_BRIDGE_DRIVER)
+        worktree = self.root / "worktree"
+        worktree.mkdir()
+        result = subprocess.run(
+            ["bun", str(driver), str(target / "plugins" / "stratarc-hooks.ts"), str(worktree)],
+            capture_output=True, text=True, check=False, timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ran = target / "hooks" / "ran.log"
+        self.assertTrue(ran.exists(), result.stderr)
+        self.assertEqual(json.loads(ran.read_text())["tool_name"], "Bash")
+        self.assertFalse((decoy / "ran.log").exists())
+
+    @pytest.mark.skipif(__import__("shutil").which("bun") is None, reason="bun is not on PATH")
+    def test_a_bridge_without_a_registry_says_so(self):
+        import subprocess
+
+        target = self.root / "empty target"
+        sync(self.source, target)
+        (target / "hooks" / "hooks.json").unlink()
+        driver = self.root / "driver.ts"
+        driver.write_text(_BRIDGE_DRIVER)
+        result = subprocess.run(
+            ["bun", str(driver), str(target / "plugins" / "stratarc-hooks.ts"), str(self.root)],
+            capture_output=True, text=True, check=False, timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"no hook registry at {target}/hooks/hooks.json", result.stderr)

@@ -1,8 +1,9 @@
 // Behavioral test of stratarc/data/hooks/opencode-runtime-hooks.ts, the OpenCode
 // plugin bridge. Run with `bun test`; pytest runs it when bun is installed.
 //
-// The bridge reads the registry stratarc deploys at
-// $HOME/.config/opencode/hooks/hooks.json and runs every command registered for
+// Loaded from the package (not from an installed plugins/ directory), the
+// bridge reads the registry at the default target,
+// $HOME/.config/opencode/hooks/hooks.json, and runs every command registered for
 // an event. HOME points at a temporary directory before the module is
 // imported, and each hook there is a fake that records the payload it was sent
 // and answers as the test says: a <name>.deny file makes it print a deny
