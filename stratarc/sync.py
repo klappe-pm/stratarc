@@ -337,6 +337,93 @@ def _verify_deployment(root: pathlib.Path, state: DeployState) -> int:
     return DRIFT
 
 
+@dataclasses.dataclass
+class DeployAccount:
+    """What a write run did to each target, for the partial-failure report.
+
+    Each target is a runtime, project delivery or the permission sweep, in a
+    state of changed, current, done, failed, not-attempted, restored or
+    restore-failed. The result is complete when nothing failed, failed when
+    nothing was written before the failure, partial when something was, and
+    restored or restore-failed after a rollback of the runtimes written.
+    """
+
+    targets: list[dict] = dataclasses.field(default_factory=list)
+
+    def add(self, area: str, name: str, state: str, reason: str, target: pathlib.Path | str = "") -> None:
+        self.targets.append({"area": area, "name": name, "state": state, "reason": reason, "target": str(target)})
+
+    def written(self) -> list[dict]:
+        return [t for t in self.targets if t["state"] in ("changed", "done")]
+
+    def result(self) -> str:
+        states = {t["state"] for t in self.targets}
+        if "restore-failed" in states:
+            return "restore-failed"
+        if "restored" in states:
+            return "restored"
+        if "failed" not in states:
+            return "complete"
+        return "partial" if self.written() else "failed"
+
+    def finish(self, *, stdout: bool = False) -> None:
+        """Print the account when anything failed, and write it to <home>/.stratarc/state/deploy-last.json."""
+        result = self.result()
+        if result != "complete" or stdout:
+            stream = sys.stderr
+            print(f"sync: deployment: {result}", file=stream)
+            for t in self.targets:
+                reason = f" ({t['reason']})" if t["reason"] else ""
+                print(f"sync: deployment: {t['state']}: {t['area']}:{t['name']}{reason}", file=stream)
+        path = home() / ".stratarc" / "state" / "deploy-last.json"
+        body = {
+            "schema": 1,
+            "ts": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "result": result,
+            "targets": self.targets,
+        }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(path.name + ".tmp")
+            temporary.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(path)
+        except OSError as error:
+            print(f"sync: deployment: the account could not be written to {short(path)}: {error.strerror or error}", file=sys.stderr)
+
+
+def _unwritable(target: pathlib.Path) -> pathlib.Path | None:
+    """The target, or its nearest existing parent, when this process cannot write to it."""
+    probe = target
+    while not probe.exists():
+        if probe.parent == probe:
+            return None
+        probe = probe.parent
+    return None if os.access(probe, os.W_OK | os.X_OK) else probe
+
+
+def _partial_failure(account: DeployAccount, state: DeployState, code: int) -> int:
+    """Report a write run that failed after preflight, and with --rollback-on-drift put back the runtimes it wrote.
+
+    Returns code, or UNAVAILABLE when a restoration was attempted and could not be completed. Project checkouts and source-root files are never rolled back.
+    """
+    from stratarc.messages import UNAVAILABLE
+
+    if state.rollback and state.backups:
+        from stratarc import deploy_ledger
+
+        created = [str(path) for path, backup in state.backups.items() if backup is None]
+        restored = _roll_back(state)
+        # A file the rollback removed is no longer Stratarc's to prune.
+        deploy_ledger.forget_everywhere(created)
+        for t in account.targets:
+            if t["area"] == "runtime" and t["state"] == "changed":
+                t["state"] = "restored" if restored else "restore-failed"
+        account.finish()
+        return code if restored else UNAVAILABLE
+    account.finish()
+    return code
+
+
 def present_action(action: str, stage: pathlib.Path) -> str:
     """An adapter's action line as the user reads it: the deployed path, never a staging path.
 
@@ -1205,7 +1292,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--prune", action="store_true")
     ap.add_argument("--dry-run", action="store_true", help="with --prune, list what would be deleted; alone, the same as --diff")
     ap.add_argument("--verify", action="store_true", help="after the write, verify this run's change against what is deployed; exit 6 on drift")
-    ap.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift, restore the runtime files from the home backups (implies --verify)")
+    ap.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift or a runtime write fails, restore the runtime files from the home backups (implies --verify)")
     ap.add_argument("--require-complete", action="store_true", help="exit 5 unless verification compared every expected runtime and project (implies --verify)")
     ap.add_argument(
         "--root",
@@ -1431,7 +1518,15 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
     unsupported = False
     gated = False
     reverse_findings: dict[str, list[Finding]] | None = None
+    account = DeployAccount()
     try:
+        # Preflight: every gate that can fail without writing runs for every
+        # runtime first, so a predictable failure (an unmapped hook event, a
+        # missing adapter, a stale or unsupported deploy, a target that cannot
+        # be written) stops a write run before any runtime or project is
+        # touched. A read-only run reports the same failures and still
+        # compares the runtimes that passed.
+        ready: list[tuple[str, object, pathlib.Path]] = []
         for name, (mod, target) in live.items():
             gaps = unmapped_hook_events(stage, name)
             if gaps:
@@ -1440,6 +1535,7 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
                     file=sys.stderr,
                 )
                 _refused(read_only, "runtime", "hook-mappings", runtime=name)
+                account.add("runtime", name, "failed", "missing hook mappings", target)
                 unsupported = True
                 continue
             try:
@@ -1450,14 +1546,16 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
                     file=sys.stderr,
                 )
                 _refused(read_only, "runtime", "adapter-missing", runtime=name)
+                account.add("runtime", name, "failed", f"adapter missing ({e.name})", target)
                 unsupported = True
                 continue
-            from stratarc.deploy_guard import refusal as _deploy_refusal, stamp_name, write_stamp
+            from stratarc.deploy_guard import refusal as _deploy_refusal
 
             stale_bad = _deploy_refusal(target, canonical_version, root)
             if stale_bad is not None:
                 print(f"sync: {name}: {stale_bad}", file=sys.stderr)
                 _refused(read_only, "runtime", "stale-deploy", runtime=name)
+                account.add("runtime", name, "failed", "stale deploy", target)
                 unsupported = True
                 continue
             if not read_only:
@@ -1466,20 +1564,45 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
                     print(line, file=sys.stderr)
                 if not allowed:
                     _refused(read_only, "runtime", "adapter-unsupported", runtime=name)
+                    account.add("runtime", name, "failed", "adapter does not support the installed runtime", target)
                     gated = True
                     continue
-            from stratarc.adapters._components import RenderRefused, notes as component_notes
+                unwritable = _unwritable(target)
+                if unwritable is not None:
+                    print(f"sync: {name}: {short(unwritable)} is not writable", file=sys.stderr)
+                    _refused(read_only, "runtime", "target-unwritable", runtime=name)
+                    account.add("runtime", name, "failed", f"{short(unwritable)} is not writable", target)
+                    unsupported = True
+                    continue
+            ready.append((name, adapter, target))
 
+        if not read_only and (gated or unsupported):
+            for name, _adapter, target in ready:
+                account.add("runtime", name, "not-attempted", "another runtime failed preflight", target)
+            if not args.only:
+                account.add("projects", "delivery", "not-attempted", "a runtime failed preflight")
+            print("sync: preflight: refusing to deploy; nothing was written to any runtime or project", file=sys.stderr)
+            account.finish(stdout=True)
+            return 5 if gated and not unsupported else 2
+
+        from stratarc.adapters._components import RenderRefused, notes as component_notes
+        from stratarc.deploy_guard import stamp_name, write_stamp
+
+        for index, (name, adapter, target) in enumerate(ready):
             try:
                 if state.rollback and not read_only:
                     _back_up_planned(adapter, name, stage, target, root, state)
                 actions = adapter.sync(stage, target, dry_run=read_only)
-            except RenderRefused as refused:
-                # A runtime file the component renderer cannot rewrite
-                # safely: this runtime fails and stays unstamped, the
-                # others still sync.
-                print(f"sync: {name}: {refused}", file=sys.stderr)
+            except (RenderRefused, OSError) as refused:
+                # A failure only the write itself can find (a runtime file
+                # the component renderer cannot rewrite safely, a write the
+                # system refuses): this runtime fails and stays unstamped,
+                # the others still sync, and the account at the end names
+                # what changed before it.
+                reason = str(refused) if isinstance(refused, RenderRefused) else f"{type(refused).__name__}: {refused.strerror or refused}"
+                print(f"sync: {name}: {reason}", file=sys.stderr)
                 _refused(read_only, "runtime", "render-refused", runtime=name)
+                account.add("runtime", name, "failed", reason, target)
                 unsupported = True
                 continue
             # A selected component this runtime's adapter cannot render is
@@ -1491,10 +1614,12 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
                 _record_deployed(adapter, name, stage, target)
             if not actions:
                 print(f"sync: {name}: current")
+                account.add("runtime", name, "current", "", target)
                 if not read_only:
                     write_stamp(target, canonical_version, root)
                 continue
             stale_any = True
+            account.add("runtime", name, "changed", "", target)
             head = "would" if read_only else "did"
             if not read_only:
                 stamp_before = _digest(target / stamp_name(root))
@@ -1528,6 +1653,10 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
     if gated:
         return 5
     if unsupported:
+        if not read_only:
+            if not args.only:
+                account.add("projects", "delivery", "not-attempted", "a runtime failed")
+            return _partial_failure(account, state, 2)
         return 2
 
     reverse_bad = False
@@ -1542,11 +1671,19 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
         delivered = run_projects(root, read_only)
         if delivered and not (diff and delivered == 1):
             _refused(read_only, "project", "delivery", file="projects-root")
+            if not read_only:
+                account.add("projects", "delivery", "failed", f"project delivery exited {delivered}")
+                return _partial_failure(account, state, delivered)
             return delivered
+        if not read_only:
+            account.add("projects", "delivery", "done", "")
 
     status, acts = run_permission_sweep(root, live, dry_run=read_only)
     if status:
         _refused(read_only, "project", "permissions", file="permissions.json")
+        if not read_only:
+            account.add("projects", "permissions", "failed", f"the permission sweep exited {status}")
+            return _partial_failure(account, state, status)
         return status
     if not acts:
         print("sync: permissions: current")
@@ -1558,6 +1695,9 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
             print(f"  {a}")
         if args.check:
             return 1
+    if not read_only:
+        account.add("projects", "permissions", "done", "")
+        account.finish()
     state.deployed = not read_only
     return 0
 

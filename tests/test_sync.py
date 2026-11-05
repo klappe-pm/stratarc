@@ -2067,3 +2067,106 @@ class TestVerifyAfterDeploy:
         root, _target, scopes, _run = world
         assert run_main("--root", str(root))[0] == 0
         assert scopes == []
+
+
+# ---------------------------------------------------------------------------
+# preflight and the partial-failure account (#17)
+# ---------------------------------------------------------------------------
+
+
+class TestPreflightAndPartialFailure:
+    """Predictable failures stop a write run before any runtime is written; a late failure is reported target by target, and --rollback-on-drift puts back the runtimes already written."""
+
+    @pytest.fixture
+    def world(self, tmp_path: Path, stratarc_home: Path):
+        root = tmp_path / "source"
+        shutil.copytree(SYNC_SOURCE, root)
+        policy = json.loads((root / "permissions.json").read_text())
+        policy["runtimeDirectories"].append("~/.codex")
+        (root / "permissions.json").write_text(json.dumps(policy))
+        claude, codex = stratarc_home / ".claude", stratarc_home / ".codex"
+        claude.mkdir()
+        codex.mkdir()
+        # A file the user keeps in the Claude Code target, which a restoration must leave alone.
+        (claude / "settings.json").write_text('{"theme": "dark"}\n')
+        return root, claude, codex, stratarc_home
+
+    @staticmethod
+    def account(home: Path) -> dict:
+        return json.loads((home / ".stratarc" / "state" / "deploy-last.json").read_text())
+
+    @staticmethod
+    def states(body: dict) -> dict[str, str]:
+        return {f"{t['area']}:{t['name']}": t["state"] for t in body["targets"]}
+
+    def test_a_predictable_failure_writes_nothing_to_any_runtime(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        root, claude, codex, home = world
+        real = sync.unmapped_hook_events
+        monkeypatch.setattr(sync, "unmapped_hook_events", lambda stage, name, maps=None: {"Stop"} if name == "codex" else real(stage, name))
+        before = (tree_snapshot(claude), tree_snapshot(codex))
+        code, _out, err = run_main("--root", str(root))
+        assert code == 2, err
+        assert "preflight: refusing to deploy; nothing was written" in err
+        assert (tree_snapshot(claude), tree_snapshot(codex)) == before
+        body = self.account(home)
+        assert body["result"] == "failed"
+        assert self.states(body) == {"runtime:codex": "failed", "runtime:claude": "not-attempted", "projects:delivery": "not-attempted"}
+
+    def test_a_late_failure_is_a_partial_deployment_with_a_complete_account(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        from stratarc.adapters import _components, codex as codex_adapter
+
+        root, claude, codex, home = world
+
+        def refuse(source, target, dry_run=False):
+            raise _components.RenderRefused("config.toml cannot be rewritten safely")
+
+        monkeypatch.setattr(codex_adapter, "sync", refuse)
+        code, _out, err = run_main("--root", str(root))
+        assert code == 2
+        assert "sync: deployment: partial" in err
+        body = self.account(home)
+        assert body["result"] == "partial"
+        assert self.states(body) == {"runtime:claude": "changed", "runtime:codex": "failed", "projects:delivery": "not-attempted"}
+        assert (claude / "AGENTS.md").is_file()
+
+    def test_rollback_restores_the_runtimes_already_written_and_is_safe_to_repeat(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        from stratarc.adapters import _components, codex as codex_adapter
+
+        root, claude, codex, home = world
+        before = tree_snapshot(claude)
+
+        def refuse(source, target, dry_run=False):
+            if dry_run:
+                return []
+            raise _components.RenderRefused("config.toml cannot be rewritten safely")
+
+        monkeypatch.setattr(codex_adapter, "sync", refuse)
+        for _ in range(2):
+            code, _out, err = run_main("--root", str(root), "--rollback-on-drift")
+            assert code == 2, err
+            body = self.account(home)
+            assert body["result"] == "restored"
+            assert self.states(body)["runtime:claude"] == "restored"
+            after = tree_snapshot(claude)
+            # Only the deploy stamp a successful runtime write leaves is not a restored file; nothing else changed.
+            after.pop(".stratarc-deploy.json", None)
+            assert after == before
+
+    def test_a_restoration_that_cannot_complete_exits_five(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        from stratarc.adapters import _components, codex as codex_adapter
+
+        root, claude, codex, home = world
+        monkeypatch.setattr(codex_adapter, "sync", lambda source, target, dry_run=False: (_ for _ in ()).throw(_components.RenderRefused("no")) if not dry_run else [])
+        monkeypatch.setattr(sync, "_roll_back", lambda state: False)
+        code, _out, err = run_main("--root", str(root), "--rollback-on-drift")
+        assert code == 5, err
+        assert self.account(home)["result"] == "restore-failed"
+
+    def test_a_complete_deployment_is_recorded_as_complete_and_prints_no_account(self, world) -> None:
+        root, claude, codex, home = world
+        code, _out, err = run_main("--root", str(root))
+        assert code == 0, err
+        assert "sync: deployment:" not in err
+        body = self.account(home)
+        assert body["result"] == "complete"
+        assert self.states(body)["runtime:claude"] == "changed" and self.states(body)["projects:permissions"] == "done"

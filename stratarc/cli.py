@@ -567,7 +567,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = _add_command(sub, "sync", "render the source into every enabled runtime and managed project")
     p.add_argument("--verify", action="store_true", help="after the write, verify the change against what is deployed; exit 6 on drift")
-    p.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift, restore the runtime files from the home backups (implies --verify)")
+    p.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift or a runtime write fails, restore the runtime files from the home backups (implies --verify)")
     p.add_argument("--require-complete", action="store_true", help="exit 5 unless verification compared every expected runtime and project (implies --verify)")
     p.add_argument("--only", metavar="RUNTIME", help="sync one runtime and skip project delivery")
     p.add_argument("--dry-run", action="store_true", help="print what a sync would change and write nothing")

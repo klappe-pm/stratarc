@@ -97,6 +97,17 @@ def record(runtime: str, paths: Iterable[str]) -> None:
     _save(ledger)
 
 
+def forget_everywhere(paths: Iterable[str]) -> None:
+    """Drop paths a rollback removed, whichever runtime recorded them."""
+    gone = set(paths)
+    ledger = load()
+    if not gone or not any(recorded & gone for recorded in ledger.values()):
+        return
+    for name in ledger:
+        ledger[name] -= gone
+    _save(ledger)
+
+
 def forget(runtime: str, paths: Iterable[str]) -> None:
     """Drop paths prune deleted, so a later hand-made file at the same path is not taken for Stratarc's."""
     gone = set(paths)

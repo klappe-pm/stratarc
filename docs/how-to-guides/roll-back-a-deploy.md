@@ -28,6 +28,14 @@ Before it writes, the run backs up every file each adapter will change, and each
 
 Rollback covers the runtime directories only. Project checkouts are verified but never rolled back, because they are working trees that may hold edits of yours. The three flags (`--verify`, `--rollback-on-drift`, `--require-complete`) cannot be combined with `--only`, `--check`, `--diff`, `--dry-run`, `--prune` or `--list`.
 
+## When a Deploy Fails Partway
+
+Before writing anything to a runtime or project, a write run checks every enabled runtime: each hook event has a mapping, the adapter is present and supports the installed version, the deploy is not older than the one in place, and the target can be written. If any check fails, nothing is written to any runtime or project, and the run exits 2 (5 when the only failure is an unsupported adapter version). The run does refresh the source root's derived files first, the rules digest in `AGENTS.md` and `control-plane.md`, which a later run regenerates.
+
+A failure only the write can find, such as a runtime file the component renderer refuses to rewrite or a write the system rejects, fails that runtime; the others still deploy, and project delivery is not attempted. The run then prints a `sync: deployment:` account naming every target as `changed`, `current`, `failed` or `not-attempted`, with the reason, and exits with the failure's status. Every write run also writes the account to `~/.stratarc/state/deploy-last.json`, whose `result` is `complete`, `failed` (nothing was written), `partial` (something was), `restored` or `restore-failed`.
+
+With `--rollback-on-drift`, a partial deployment puts back the runtime files it wrote from the backups taken before the write, and the account marks those runtimes `restored`; the exit status is still the failure's. If a backup is missing, the runtimes are marked `restore-failed` and the run exits 5. Restoration rewrites only the files the run backed up or created, so an unrelated file you edited in the meantime is left alone, and running the same command again is safe. Project checkouts and the source root are never rolled back.
+
 ## Restore a File by Hand
 
 Every file Stratarc replaces in its own home, and every runtime file a `--rollback-on-drift` run changes, is first copied into `~/.stratarc/backups/`. Look there for an older copy:
