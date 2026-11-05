@@ -1212,6 +1212,29 @@ def refuse_on_invalid_source(root: pathlib.Path) -> int | None:
     return None
 
 
+def _reconciled_preview(root: pathlib.Path):
+    """The control plane reconcile would write for root, parsed from a scratch copy, or None when it cannot be rendered."""
+    from stratarc import reconcile
+    from stratarc.control_plane import ControlPlane
+
+    saved = reconcile._root_flag
+    try:
+        reconcile.configure_root(root)
+        document, _notes = reconcile.render(ControlPlane.load(control_plane_file(root)), reconcile.load_rule_tiers())
+    except Exception as error:  # the preview falls back to the file on disk and says so
+        print(f"sync: control-plane: the reconciled preview could not be rendered ({type(error).__name__}); previewing the file on disk", file=sys.stderr)
+        return None
+    finally:
+        reconcile._root_flag = saved
+    scratch = pathlib.Path(tempfile.mkdtemp(prefix="stratarc-plane-"))
+    try:
+        path = scratch / control_plane_file(root).name
+        path.write_text(document, encoding="utf-8")
+        return ControlPlane.load(path)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def run_reconcile(root: pathlib.Path, check: bool) -> int:
     """Run the control plane reconciler against root as a child and forward its output."""
     result = subprocess.run(
@@ -1484,6 +1507,12 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
     from stratarc.staging import build_stage, cleanup_all
 
     cp = ControlPlane.load(control_plane_file(root))
+    if diff and reconciled == 1:
+        # A stale control plane is what a sync reconciles before it writes,
+        # so the preview renders against the reconciled one, kept in memory;
+        # otherwise it would omit the writes a new row (a fresh source
+        # root's instruction file, for one) is about to cause.
+        cp = _reconciled_preview(root) or cp
 
     # runtime:<name> rows in the global column gate which runtimes receive anything
     if cp.rows:

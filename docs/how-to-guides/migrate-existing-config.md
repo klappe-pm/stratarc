@@ -36,13 +36,18 @@ cd ~/stratarc-source && stratarc validate --strict
 cd ~/stratarc-source && stratarc diff
 ```
 
-`validate` catches a misspelled tool name, a bad registry entry or a rule with no binding section. `diff` shows every change to every runtime. Read it. Then:
+`validate` catches a misspelled tool name, a bad registry entry or a rule with no binding section. `diff` shows every change to every runtime, against the control plane as `sync` will reconcile it, and writes nothing. Read it for what the first deploy replaces:
+
+- A `would copy` line names a file the source produces, such as `~/.claude/CLAUDE.md` or a command with the same name as yours. The deploy replaces that file whole, so its content must already be in the source.
+- `render permissions.json into ~/.claude/settings.json` replaces the runtime's whole permission block (`permissions` in Claude Code, `permission` in OpenCode, and so on) with the policy in `permissions.json`. Every other key in the file stays.
+
+Then:
 
 ```bash
 cd ~/stratarc-source && stratarc check
 ```
 
-`check` lists what each runtime holds that your source does not own, under headings such as orphan, undeclared and foreign hook group. Each line is either something to move into the source, something to declare in `components.json`, or something to leave alone.
+`check` lists what each runtime holds that your source does not own, under headings such as unmanaged, undeclared and foreign hook group. Each line is either something to move into the source, something to declare in `components.json`, or something to leave alone. A file under `unmanaged` was never deployed by Stratarc, so `prune` never deletes it.
 
 ## Deploy
 
@@ -50,4 +55,4 @@ cd ~/stratarc-source && stratarc check
 cd ~/stratarc-source && stratarc sync --verify --rollback-on-drift
 ```
 
-The first deploy writes only files the source produces and merges into your settings files without removing entries it does not own. With `--rollback-on-drift` the runtime directories are put back if the result does not match. From here on, edit the source and not the runtime directory: a later sync overwrites a hand edit to a file Stratarc owns.
+The first deploy writes only files the source produces and merges into your settings files without removing entries it does not own. With `--rollback-on-drift` it first copies every runtime file it will change into `~/.stratarc/backups/`, and puts the runtime directories back if the result does not match or a runtime fails partway; the copies stay there either way, so a file you meant to keep can be recovered by hand, as [Roll Back a Deploy](roll-back-a-deploy.md) describes. From here on, edit the source and not the runtime directory: a later sync overwrites a hand edit to a file Stratarc owns.

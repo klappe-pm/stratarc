@@ -2170,3 +2170,29 @@ class TestPreflightAndPartialFailure:
         body = self.account(home)
         assert body["result"] == "complete"
         assert self.states(body)["runtime:claude"] == "changed" and self.states(body)["projects:permissions"] == "done"
+
+
+class TestPreviewMatchesTheWrite:
+    """#20: `diff` on a source root whose control plane is stale previews the writes `sync` will make after it reconciles."""
+
+    def test_a_fresh_scaffold_previews_the_instruction_file_it_replaces(self, tmp_path: Path, stratarc_home: Path) -> None:
+        environment = {key: value for key, value in os.environ.items() if not key.startswith(("GIT_", "STRATARC_"))}
+        environment.update(HOME=str(stratarc_home), STRATARC_HOME=str(stratarc_home), PYTHONPATH=str(REPO_ROOT))
+        (stratarc_home / ".claude").mkdir()
+        (stratarc_home / ".claude" / "CLAUDE.md").write_text("my own notes\n")
+        source = tmp_path / "source"
+
+        def stratarc(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run([sys.executable, "-m", "stratarc", *args], capture_output=True, text=True, env=environment, cwd=tmp_path, timeout=120)
+
+        assert stratarc("init", str(source)).returncode == 0
+        plane = source / "projects" / "roots" / "control-plane.md"
+        before = plane.read_bytes()
+        preview = stratarc("--root", str(source), "diff")
+        assert preview.returncode == 0, preview.stdout + preview.stderr
+        assert "would copy ~/.claude/CLAUDE.md" in preview.stdout, preview.stdout
+        assert plane.read_bytes() == before
+        assert (stratarc_home / ".claude" / "CLAUDE.md").read_text() == "my own notes\n"
+        deployed = stratarc("--root", str(source), "sync")
+        assert deployed.returncode == 0, deployed.stdout + deployed.stderr
+        assert "copy ~/.claude/CLAUDE.md" in deployed.stdout
