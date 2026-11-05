@@ -220,7 +220,8 @@ options:
                        run it writes nothing; it never delivers config (that
                        stays with `stratarc sync`)
   --checkout PATH      with --new: the project's checkout (default:
-                       active/NAME under the projects root)
+                       active/NAME under the projects root, or NAME when the
+                       projects root has no status folders)
   --remote OWNER/REPO  with --new: the project's GitHub slug, recorded in
                        remotes.json and as the origin in the control plane
   --public             with --new: the project is a public repository; list it

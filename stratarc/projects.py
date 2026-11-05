@@ -1949,7 +1949,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--checkout",
         metavar="PATH",
-        help="with --new: the project's checkout (default: active/NAME under the projects root)",
+        help="with --new: the project's checkout (default: active/NAME under the projects root, or NAME when the projects root has no status folders)",
     )
     ap.add_argument(
         "--remote",

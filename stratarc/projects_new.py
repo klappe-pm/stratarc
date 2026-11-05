@@ -144,11 +144,16 @@ def copy_root(root: pathlib.Path, name: str, apply: bool, workflows: bool) -> li
     if not template.is_dir():
         raise NewRefused(f"the source root has no {template.relative_to(root).as_posix()}/; add the project template there first")
     target = paths.project_config_dir(root) / name
-    pairs = [(f, target / f.relative_to(template)) for f in _template_files(template)]
+    # The optional workflow template is copied only with --workflows, from
+    # templates/project/workflows.toml or, where the bundled template keeps
+    # it, templates/project/roots/workflows.toml.
+    in_roots = template / WORKFLOWS_TEMPLATE
+    pairs = [(f, target / f.relative_to(template)) for f in _template_files(template) if f != in_roots]
     if workflows:
-        extra = _template_dir(root, WORKFLOWS_TEMPLATE)
-        if extra.is_file():
-            pairs.append((extra, target / WORKFLOWS_TEMPLATE))
+        for extra in (_template_dir(root, WORKFLOWS_TEMPLATE), in_roots):
+            if extra.is_file():
+                pairs.append((extra, target / WORKFLOWS_TEMPLATE))
+                break
     actions: list[str] = []
     for source, dest in pairs:
         if dest.exists():
@@ -405,9 +410,21 @@ def run_registry_check(root: pathlib.Path) -> int:
 
 
 def checkout_path(root: pathlib.Path, name: str, explicit: str | None) -> pathlib.Path:
+    """The checkout --new works on: --checkout, else active/NAME, else NAME in a flat projects root.
+
+    A projects root is flat when its checkouts sit directly in it, with no status folders; there a checkout at NAME, or one not yet made, is NAME, as reconcile reads it.
+    """
     if explicit:
         return pathlib.Path(explicit).expanduser()
-    return paths.projects_dir(root) / "active" / name
+    base = paths.projects_dir(root)
+    active, flat = base / "active" / name, base / name
+    if active.exists():
+        return active
+    if (flat / ".git").exists():
+        return flat
+    if base.is_dir() and not any((base / folder).is_dir() for folder in STATUS_FOLDERS):
+        return flat
+    return active
 
 
 def project_status(checkout: pathlib.Path, base: pathlib.Path) -> str:
