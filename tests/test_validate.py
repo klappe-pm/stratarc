@@ -349,3 +349,56 @@ class TestRuntimeConfig:
         write(tmp_path, "stratarc.toml", "[runtimes.claude]\nenabled = true\n[runtimes.acme]\nenabled = true\n")
         write(tmp_path, "adapters/acme.py", 'RUNTIME = {"name": "acme", "target": ".acme", "hook_registry": None, "hook_events": []}\n')
         assert vs.check_runtime_config(tmp_path) == []
+
+
+class TestHookRegistry:
+    """#14: hooks/hooks.json is held to hooks.schema.json by the gate itself, not only by the schema tests."""
+
+    SCHEMA_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "schema" / "hooks"
+
+    def test_the_check_agrees_with_the_schema_on_every_fixture(self) -> None:
+        jsonschema = pytest.importorskip("jsonschema")
+        from importlib.resources import files
+
+        schema = json.loads((files("stratarc") / "data" / "schema" / "hooks.schema.json").read_text(encoding="utf-8"))
+        checker = jsonschema.Draft202012Validator(schema)
+        paths = sorted(self.SCHEMA_FIXTURES.glob("*/*.json"))
+        assert len(paths) > 10
+        for path in paths:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            assert checker.is_valid(document) == (path.parent.name == "valid"), path
+            assert (not vs.hook_registry_problems(document)) == checker.is_valid(document), path
+
+    @pytest.mark.parametrize(
+        ("hook", "message"),
+        [
+            ({"type": "command", "command": "a.sh", "timeout": 0}, "PreToolUse[0].hooks[0].timeout: must be a number of seconds greater than 0"),
+            ({"type": "prompt", "command": "a.sh"}, 'PreToolUse[0].hooks[0].type: must be "command"'),
+            ({"command": "a.sh"}, 'PreToolUse[0].hooks[0]: has no type; set it to "command"'),
+            ({"type": "command", "command": ""}, "PreToolUse[0].hooks[0].command: must be a non-empty string"),
+        ],
+    )
+    def test_each_rejection_names_the_file_and_key(self, tmp_path: Path, hook: dict, message: str) -> None:
+        write(tmp_path, "hooks/hooks.json", json.dumps({"PreToolUse": [{"matcher": "Bash", "hooks": [hook]}]}))
+        found = by_check(vs.check_hook_registry(tmp_path), "hook-registry")
+        assert [(f["severity"], f["path"], f["message"]) for f in found] == [("error", "hooks/hooks.json", message)]
+
+    def test_a_message_never_quotes_a_command(self, tmp_path: Path) -> None:
+        command = "TOKEN=abcdef0123456789abcdef0123456789 run.sh"
+        write(tmp_path, "hooks/hooks.json", json.dumps({"PreToolUse": [{"hooks": [{"type": "command", "command": command, "timeout": -1}]}], "Nope": [{"hooks": [{"command": command}]}]}))
+        found = vs.check_hook_registry(tmp_path)
+        assert len(found) == 2
+        assert all(command not in f["message"] and "abcdef" not in f["message"] for f in found)
+
+    def test_invalid_json_and_absent_registry(self, tmp_path: Path) -> None:
+        assert vs.check_hook_registry(tmp_path) == []
+        write(tmp_path, "hooks/hooks.json", '{"PreToolUse": [')
+        [found] = vs.check_hook_registry(tmp_path)
+        assert found["message"].startswith("is not valid JSON: line 1")
+
+    def test_unknown_keys_stay_allowed(self, tmp_path: Path) -> None:
+        write(tmp_path, "hooks/hooks.json", json.dumps({"Stop": [{"hooks": [{"type": "command", "command": "a.sh", "async": True}], "note": "x"}]}))
+        assert vs.check_hook_registry(tmp_path) == []
+
+    def test_the_gate_runs_it(self) -> None:
+        assert vs.check_hook_registry in vs.CHECKS

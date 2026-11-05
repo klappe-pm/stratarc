@@ -49,7 +49,9 @@ Add the script to `hooks/hooks.json`, which maps a canonical event to groups of 
 - The event is one of `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop`, `UserPromptSubmit`, `SessionStart`, `SubagentStart` or `SubagentStop`.
 - `matcher` is a tool name pattern and is optional. Leave it out to match every tool.
 - `command` always names the Claude Code location, `$HOME/.claude/hooks/<script>`. Each adapter rewrites the path for its runtime.
-- `timeout` is in seconds. Adapters convert it to the runtime's own unit.
+- `type` is always `command`, and `command` is a non-empty string.
+- `timeout` is in seconds, greater than 0, and optional. Adapters convert it to the runtime's own unit.
+- `validate`, and therefore every `sync`, `check` and `diff`, refuses a registry that breaks these rules (the `hook-registry` check) and names the event, group and hook index of each problem, before anything is written.
 
 ## Deploy
 

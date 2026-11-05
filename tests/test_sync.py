@@ -1540,6 +1540,22 @@ class TestSyncRunTouchesOnlyTheRedirectedHome:
         again = self.run(base, source, environment, "--check")
         assert again.returncode == 0, again.stdout + again.stderr
 
+    def test_a_malformed_hook_registry_refuses_every_mode_before_any_write(self, layout) -> None:
+        """#14: validate, diff, check and the write run hold hooks/hooks.json to the schema, and nothing is written."""
+        base, source, home, _decoy, environment = layout
+        (source / "hooks").mkdir()
+        (source / "hooks" / "gate.sh").write_text("#!/bin/bash\nexit 0\n")
+        (source / "hooks" / "hooks.json").write_text(json.dumps({"PreToolUse": [{"hooks": [{"type": "command", "command": "$HOME/.claude/hooks/gate.sh", "timeout": 0}]}]}))
+        # The write run lays out ~/.stratarc first, as every write run does; no runtime target is touched.
+        before = tree_snapshot(home / ".claude")
+        for flags in ((), ("--diff",), ("--check",)):
+            result = self.run(base, source, environment, *flags)
+            assert result.returncode != 0, (flags, result.stdout + result.stderr)
+            assert "hook-registry" in result.stdout and "PreToolUse[0].hooks[0].timeout" in result.stdout
+            assert tree_snapshot(home / ".claude") == before
+        validated = subprocess.run([sys.executable, "-m", "stratarc.validate", "--root", str(source), "--strict"], capture_output=True, text=True, cwd=base, env=environment, timeout=120)
+        assert validated.returncode != 0 and "hook-registry" in validated.stdout
+
     def test_prune_removes_only_what_a_recorded_sync_deployed(self, layout) -> None:
         """#13: across Claude Code and Codex, a command and an agent the user made by hand survive prune; the ones a sync deployed and the source then dropped go."""
         base, source, home, _decoy, environment = layout

@@ -247,6 +247,85 @@ def check_components_manifest(root: Path) -> list[dict]:
     return [finding("error", "components-manifest", "components.json", problem) for problem in components.validate(document)]
 
 
+# ----- check 2d: hooks/hooks.json against hooks.schema.json -----
+
+
+def _hook_events() -> tuple[str, ...]:
+    """The canonical event names, read from the bundled schema so the check and the schema never disagree."""
+    from importlib.resources import files
+
+    schema = json.loads((files("stratarc") / "data" / "schema" / "hooks.schema.json").read_text(encoding="utf-8"))
+    return tuple(schema["propertyNames"]["enum"])
+
+
+def _is_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def hook_registry_problems(document: object) -> list[str]:
+    """Every way document breaks hooks.schema.json, each naming the key path and never a value.
+
+    The standard library equivalent of the schema: an object keyed by canonical event, each event a list of groups, each group an object with an optional string matcher and a non-empty hooks list, each hook an object with type "command", a non-empty string command, an optional timeout greater than 0 and an optional string statusMessage. Other keys stay allowed, as the schema leaves them open for adapters to pass through. A message never quotes a command, which may carry a secret.
+    """
+    if not isinstance(document, dict):
+        return ["must be a JSON object mapping each event to a list of hook groups"]
+    events = _hook_events()
+    problems: list[str] = []
+    for event, groups in document.items():
+        if event not in events:
+            problems.append(f"{event}: not a canonical event; use one of {', '.join(events)}")
+            continue
+        if not isinstance(groups, list):
+            problems.append(f"{event}: must be a list of hook groups")
+            continue
+        for g_index, group in enumerate(groups):
+            where = f"{event}[{g_index}]"
+            if not isinstance(group, dict):
+                problems.append(f"{where}: must be an object with a hooks list")
+                continue
+            if "matcher" in group and not isinstance(group["matcher"], str):
+                problems.append(f"{where}.matcher: must be a string")
+            if "hooks" not in group:
+                problems.append(f"{where}: has no hooks list")
+                continue
+            hooks = group["hooks"]
+            if not isinstance(hooks, list) or not hooks:
+                problems.append(f"{where}.hooks: must be a non-empty list of hooks")
+                continue
+            for h_index, hook in enumerate(hooks):
+                at = f"{where}.hooks[{h_index}]"
+                if not isinstance(hook, dict):
+                    problems.append(f"{at}: must be an object with type and command")
+                    continue
+                if "type" not in hook:
+                    problems.append(f"{at}: has no type; set it to \"command\"")
+                elif hook["type"] != "command":
+                    problems.append(f"{at}.type: must be \"command\"")
+                if "command" not in hook:
+                    problems.append(f"{at}: has no command")
+                elif not isinstance(hook["command"], str) or not hook["command"]:
+                    problems.append(f"{at}.command: must be a non-empty string")
+                if "timeout" in hook and not (_is_number(hook["timeout"]) and hook["timeout"] > 0):
+                    problems.append(f"{at}.timeout: must be a number of seconds greater than 0")
+                if "statusMessage" in hook and not isinstance(hook["statusMessage"], str):
+                    problems.append(f"{at}.statusMessage: must be a string")
+    return problems
+
+
+def check_hook_registry(root: Path) -> list[dict]:
+    """Validate hooks/hooks.json against the bundled hooks.schema.json contract, so a malformed registry fails the gate before any deploy writes."""
+    path = root / "hooks" / "hooks.json"
+    if not path.is_file():
+        return []
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as error:
+        return [finding("error", "hook-registry", "hooks/hooks.json", f"cannot be read: {type(error).__name__}")]
+    except ValueError as error:
+        return [finding("error", "hook-registry", "hooks/hooks.json", f"is not valid JSON: line {getattr(error, 'lineno', '?')}, column {getattr(error, 'colno', '?')}")]
+    return [finding("error", "hook-registry", "hooks/hooks.json", problem) for problem in hook_registry_problems(document)]
+
+
 # ----- check 3: docs/ and .docs/ frontmatter and headings -----
 
 # ----- check 4: rule tier membership -----
@@ -388,6 +467,7 @@ CHECKS: tuple = (
     check_rule_paths_line,
     check_rule_binding_budget,
     check_components_manifest,
+    check_hook_registry,
     check_rule_tiers,
     check_reference_graph,
     check_runtime_config,

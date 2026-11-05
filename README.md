@@ -54,7 +54,7 @@ Stratarc gives you one place to write it all down. You keep a single source tree
 - **Any runtime, one source.** Claude Code, Codex, Gemini CLI, Cursor and OpenCode are all rendered from the same tree; enable the ones you use.
 - **Everything agents read.** Instructions, rules, hooks, skills, commands, subagents and permissions, each translated into the form the runtime expects.
 - **Safe by default.** `diff` and `check` show exactly what would change before `sync` writes anything, and Stratarc only ever touches files it owns.
-- **Validated before deploy.** The source root is checked against bundled JSON Schemas and the engine's own rules on every run.
+- **Validated before deploy.** The source root's hook registry and component manifest are checked against the contracts in the bundled JSON Schemas, and the rest against the engine's own rules, before every run writes anything.
 - **Projects too.** Managed project checkouts receive their configuration alongside the user-level runtime directories.
 - **Bring your own runtime.** A runtime Stratarc does not ship with is one Python file in your source root; `stratarc adapter new` writes the starting point, and it is managed like the rest.
 - **Nothing to install but Python.** Pure standard library at runtime, no dependencies.

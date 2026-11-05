@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "hooks/hooks.json",
   "description": "The canonical hook registry: each event maps to hook groups, and each group to the commands it runs, in Claude Code's hook format.",
-  "$comment": "No dedicated validator reads this file; the schema encodes the shape the staging filter and the runtime adapters rely on. Event names are the canonical events every adapter declares; a sync refuses a runtime that does not map an event the registry uses. Hook objects stay open because adapters pass unknown keys through. Deliberately tighter than the code: type is fixed to command and timeout to a positive number, which no code checks but every adapter assumes.",
+  "$comment": "The hook-registry check in stratarc/validate.py (hook_registry_problems) is the standard library equivalent of this schema and runs in the gate before every sync, check and diff; tests/test_validate.py holds the two in agreement over every fixture. Event names are the canonical events every adapter declares, read by that check from this file; a sync refuses a runtime that does not map an event the registry uses. Hook and group objects stay open because adapters pass unknown keys through. type is fixed to command and timeout to a positive number, which every adapter assumes.",
   "type": "object",
   "propertyNames": {
     "enum": [
