@@ -1,0 +1,1 @@
+{"PreToolUse": [{"hooks": [{"type": "command", "command": "a.sh", "timeout": true}]}]}

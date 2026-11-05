@@ -34,6 +34,18 @@ REPORT_SCHEMA = 1
 VERIFIED = "verified"
 DRIFTED = "drift"
 SKIPPED = "skipped"
+# A report's result beyond verified and drift: some expected target was not
+# compared, or nothing was compared at all. Neither changes the exit status
+# unless the caller requires complete coverage (Report.complete).
+INCOMPLETE = "incomplete"
+NO_TARGETS = "no-targets"
+
+# What a verify run proves, stated in every report so a clean result is not
+# read as more than it is.
+EVIDENCE = (
+    "file consistency: a fresh render through the same adapters matches the deployed files byte for byte; "
+    "it does not show that a runtime loaded the files or enforces them"
+)
 
 _PATH = re.compile(r"(/[^\s'\"`,;()]+)")
 
@@ -58,6 +70,9 @@ class Report:
     root: str
     files: list[dict] = dataclasses.field(default_factory=list)
     notes: list[str] = dataclasses.field(default_factory=list)
+    # One entry per target the scope covers: {area, name, expected, state, reason, target}.
+    # state is verified, drift, skipped or excluded; expected is False only for excluded.
+    targets: list[dict] = dataclasses.field(default_factory=list)
 
     @property
     def counts(self) -> dict[str, int]:
@@ -74,6 +89,35 @@ class Report:
     def exit_code(self) -> int:
         return DRIFT if self.drifted else OK
 
+    @property
+    def result(self) -> str:
+        if self.drifted:
+            return DRIFTED
+        attempted = [t for t in self.targets if t["state"] in (VERIFIED, DRIFTED)]
+        if not attempted:
+            return NO_TARGETS
+        if any(t["expected"] and t["state"] == SKIPPED for t in self.targets):
+            return INCOMPLETE
+        return VERIFIED
+
+    @property
+    def complete(self) -> bool:
+        """True when every expected target was compared and none drifted."""
+        return self.result == VERIFIED
+
+    def coverage(self) -> dict:
+        def names(state: str) -> list[str]:
+            return [f"{t['area']}:{t['name']}" for t in self.targets if t["state"] == state]
+
+        return {
+            "expected": [f"{t['area']}:{t['name']}" for t in self.targets if t["expected"]],
+            "attempted": [f"{t['area']}:{t['name']}" for t in self.targets if t["state"] in (VERIFIED, DRIFTED)],
+            "verified": names(VERIFIED),
+            "failed": names(DRIFTED),
+            "skipped": [{"target": f"{t['area']}:{t['name']}", "reason": t["reason"]} for t in self.targets if t["state"] == SKIPPED],
+            "excluded": [{"target": f"{t['area']}:{t['name']}", "reason": t["reason"]} for t in self.targets if t["state"] == "excluded"],
+        }
+
     def to_dict(self) -> dict:
         return {
             "schema": REPORT_SCHEMA,
@@ -81,9 +125,12 @@ class Report:
             "ts": self.ts,
             "scope": self.scope,
             "root": self.root,
-            "result": DRIFTED if self.drifted else VERIFIED,
+            "result": self.result,
+            "complete": self.complete,
             "exit": self.exit_code,
             "counts": self.counts,
+            "coverage": self.coverage(),
+            "evidence": EVIDENCE,
             "files": self.files,
             "notes": self.notes,
         }
@@ -116,6 +163,50 @@ def _live_runtimes(root: Path) -> dict[str, tuple[str, Path]]:
     if cp.rows:
         live = {name: value for name, value in live.items() if cp.enabled("global", f"runtime:{name}")}
     return live
+
+
+def _runtime_coverage(root: Path, live: dict[str, tuple[str, Path]]) -> list[dict]:
+    """Every known runtime that is not compared, and why.
+
+    A runtime `stratarc.toml` enables, or one that is installed and not turned off, is expected. One that is expected but not compared (its target does not exist) is skipped, which leaves the report incomplete. One the configuration or the control plane turns off, or one that is neither installed nor named, is excluded: listed with its reason, not expected.
+    """
+    from stratarc import sync
+    from stratarc.config import load_config
+    from stratarc.control_plane import ControlPlane
+
+    runtimes = sync.load_runtimes(root=root)
+    configured = load_config(root).runtimes
+    cp = ControlPlane.load(control_plane_file(root))
+    out: list[dict] = []
+    for name, (_mod, target) in runtimes.items():
+        if name in live:
+            continue
+        setting = configured.get(name)
+        installed = target.is_dir()
+        if setting is not None and not setting.enabled:
+            out.append(_target("runtime", name, False, "excluded", "enabled = false in stratarc.toml", target))
+        elif cp.rows and not cp.enabled("global", f"runtime:{name}"):
+            out.append(_target("runtime", name, False, "excluded", "turned off in the control plane", target))
+        elif setting is not None and setting.enabled:
+            out.append(_target("runtime", name, True, SKIPPED, f"enabled in stratarc.toml, but its target {target} does not exist", target))
+        elif not installed:
+            out.append(_target("runtime", name, False, "excluded", f"not installed ({target} does not exist)", target))
+    return out
+
+
+def _target(area: str, name: str, expected: bool, state: str, reason: str = "", target: Path | str = "") -> dict:
+    return {"area": area, "name": name, "expected": expected, "state": state, "reason": reason, "target": str(target)}
+
+
+def _state_of(entries: list[dict]) -> tuple[str, str]:
+    """A target's state from its file entries: drift beats skipped beats verified."""
+    statuses = {e["status"] for e in entries}
+    if DRIFTED in statuses:
+        return DRIFTED, ""
+    if SKIPPED in statuses or not entries:
+        reason = next((e["detail"] for e in entries if e["status"] == SKIPPED and e.get("detail")), "") or "nothing was compared"
+        return SKIPPED, reason
+    return VERIFIED, ""
 
 
 def _sync_call(adapter, name: str, stage: Path, target: Path, root: Path, *, dry_run: bool) -> list[str]:
@@ -293,13 +384,24 @@ def run(scope: str = "all", *, root: Path | None = None, record: bool = True, ac
                 report.notes.extend(f"control-plane: {n}" for n in stage_notes)
                 try:
                     for name, (mod, target) in live.items():
-                        report.files.extend(_compare_runtime(name, mod, target, stage, root, report.notes))
+                        entries = _compare_runtime(name, mod, target, stage, root, report.notes)
+                        report.files.extend(entries)
+                        state, reason = _state_of(entries)
+                        report.targets.append(_target("runtime", name, True, state, reason, target))
                 finally:
                     cleanup_all()
             else:
                 report.notes.append("no installed runtime is enabled; nothing to compare")
+            report.targets.extend(_runtime_coverage(root, live))
         if kind in ("all", "project") or project_names:
-            report.files.extend(_compare_projects(root, project_names, report.notes))
+            entries = _compare_projects(root, project_names, report.notes)
+            report.files.extend(entries)
+            by_project: dict[str, list[dict]] = {}
+            for entry in entries:
+                by_project.setdefault(entry["name"], []).append(entry)
+            for name, project_entries in by_project.items():
+                state, reason = _state_of(project_entries)
+                report.targets.append(_target("project", name, True, state, reason))
 
     _write_report(report)
     if record:
@@ -378,10 +480,23 @@ def format_report(report: dict, *, verbose: bool = False) -> str:
         f"{report['id']}  scope {report['scope']}  {report['ts']}",
         f"result: {report['result']}  ({counts.get(VERIFIED, 0)} verified, {counts.get(DRIFTED, 0)} drift, {counts.get(SKIPPED, 0)} skipped)",
     ]
+    coverage = report.get("coverage")
+    if coverage is not None:
+        lines.append(
+            f"targets: {len(coverage['expected'])} expected, {len(coverage['attempted'])} compared, "
+            f"{len(coverage['verified'])} verified, {len(coverage['failed'])} drift, {len(coverage['skipped'])} skipped"
+        )
+        if report["result"] == NO_TARGETS:
+            lines.append("  no target was compared, so nothing is verified")
+        lines.extend(f"  skipped  {item['target']}  {item['reason']}" for item in coverage["skipped"])
+        if verbose:
+            lines.extend(f"  excluded {item['target']}  {item['reason']}" for item in coverage.get("excluded", []))
     for entry in report.get("files", []):
         if entry["status"] == VERIFIED and not verbose:
             continue
         suffix = f"  {entry['detail']}" if entry.get("detail") else ""
         lines.append(f"  {entry['status']:8s} {entry['area']}:{entry['name']} {entry['file']}{suffix}")
     lines.extend(f"note: {n}" for n in report.get("notes", []))
+    if report.get("evidence"):
+        lines.append(f"evidence: {report['evidence']}")
     return "\n".join(lines)

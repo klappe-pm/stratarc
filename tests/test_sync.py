@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from stratarc import deploy_ledger
 from stratarc import sync
 from stratarc.adapters._common import runtime_registry
 from tests.conftest import PACKAGE_DIR, REPO_ROOT, tree_snapshot
@@ -913,6 +914,8 @@ class TestRunPrune:
             ]
         }
         (target / "settings.json").write_text(json.dumps({"hooks": hooks, "theme": "dark"}) + "\n")
+        # An earlier write run deployed the stale rule: the ledger is prune's evidence that it is Stratarc's.
+        deploy_ledger.record("claude", [str(target / "rules" / "stale-rule.md")])
         return root, target, live_for("claude", target), stratarc_home
 
     def prune(self, root: Path, live: dict, *, dry_run: bool) -> tuple[int, str]:
@@ -931,7 +934,8 @@ class TestRunPrune:
         assert "excluded" not in printed and "foreign" not in printed
         assert (target / "rules" / "stale-rule.md").exists()
         assert (target / "rules" / "retired-rule.md").exists()
-        assert not (home / ".stratarc").exists()
+        assert not (home / ".stratarc" / "telemetry").exists()
+        assert not (home / ".stratarc" / "backups").exists()
 
     def test_real_prune_deletes_orphan_retired_and_dangling_and_survivors_remain(self, layout) -> None:
         root, target, live, home = layout
@@ -954,6 +958,7 @@ class TestRunPrune:
         root, target, live, home = layout
         self.prune(root, live, dry_run=False)
         (target / "rules" / "second-stale-rule.md").write_text("stale\n")
+        deploy_ledger.record("claude", [str(target / "rules" / "second-stale-rule.md")])
         self.prune(root, live, dry_run=False)
         telemetry_files = list((home / ".stratarc" / "telemetry").glob("prune-*.txt"))
         assert len(telemetry_files) == 1
@@ -980,6 +985,45 @@ class TestRunPrune:
         assert code == 0
         assert "would delete claude: orphan:" in out
         assert (target / "rules" / "stale-rule.md").exists()
+
+    def test_a_hand_made_file_in_an_owned_directory_survives_dry_run_and_prune(self, layout) -> None:
+        """#13: a file no recorded sync deployed is unmanaged: named, never deleted."""
+        root, target, live, home = layout
+        personal = target / "rules" / "personal.md"
+        personal.write_text("mine\n")
+        code, printed = self.prune(root, live, dry_run=True)
+        assert code == 0
+        assert f"not pruned claude: unmanaged: {personal}" in printed
+        assert f"would delete claude: orphan: {personal}" not in printed
+        assert "(deployed by a recorded sync; the source no longer produces it)" in printed
+        code, printed = self.prune(root, live, dry_run=False)
+        assert code == 0
+        assert personal.read_text() == "mine\n"
+        assert not (target / "rules" / "stale-rule.md").exists()
+
+    def test_every_deleted_file_is_copied_to_a_backup_first_and_forgotten_by_the_ledger(self, layout) -> None:
+        root, target, live, home = layout
+        code, printed = self.prune(root, live, dry_run=False)
+        assert code == 0
+        backups = list((home / ".stratarc" / "backups" / "prune").glob("*/claude/rules/stale-rule.md"))
+        assert len(backups) == 1 and backups[0].read_text() == "stale\n"
+        assert "copies of the deleted files are in" in printed
+        telemetry = next((home / ".stratarc" / "telemetry").glob("prune-*.txt")).read_text()
+        assert f"# backup {backups[0].parents[2]}" in telemetry
+        assert str(target / "rules" / "stale-rule.md") not in deploy_ledger.load().get("claude", set())
+        # A hand-made file later put at the same path is not taken for Stratarc's.
+        (target / "rules" / "stale-rule.md").write_text("mine now\n")
+        self.prune(root, live, dry_run=False)
+        assert (target / "rules" / "stale-rule.md").read_text() == "mine now\n"
+
+    def test_without_a_ledger_nothing_unrecorded_is_deleted(self, layout) -> None:
+        """A home written before the ledger existed records nothing, so its orphans are preserved."""
+        root, target, live, home = layout
+        deploy_ledger.ledger_path().unlink()
+        code, printed = self.prune(root, live, dry_run=False)
+        assert code == 0
+        assert (target / "rules" / "stale-rule.md").exists()
+        assert "unmanaged" in printed
 
 
 # ---------------------------------------------------------------------------
@@ -1496,6 +1540,58 @@ class TestSyncRunTouchesOnlyTheRedirectedHome:
         again = self.run(base, source, environment, "--check")
         assert again.returncode == 0, again.stdout + again.stderr
 
+    def test_a_malformed_hook_registry_refuses_every_mode_before_any_write(self, layout) -> None:
+        """#14: validate, diff, check and the write run hold hooks/hooks.json to the schema, and nothing is written."""
+        base, source, home, _decoy, environment = layout
+        (source / "hooks").mkdir()
+        (source / "hooks" / "gate.sh").write_text("#!/bin/bash\nexit 0\n")
+        (source / "hooks" / "hooks.json").write_text(json.dumps({"PreToolUse": [{"hooks": [{"type": "command", "command": "$HOME/.claude/hooks/gate.sh", "timeout": 0}]}]}))
+        # The write run lays out ~/.stratarc first, as every write run does; no runtime target is touched.
+        before = tree_snapshot(home / ".claude")
+        for flags in ((), ("--diff",), ("--check",)):
+            result = self.run(base, source, environment, *flags)
+            assert result.returncode != 0, (flags, result.stdout + result.stderr)
+            assert "hook-registry" in result.stdout and "PreToolUse[0].hooks[0].timeout" in result.stdout
+            assert tree_snapshot(home / ".claude") == before
+        validated = subprocess.run([sys.executable, "-m", "stratarc.validate", "--root", str(source), "--strict"], capture_output=True, text=True, cwd=base, env=environment, timeout=120)
+        assert validated.returncode != 0 and "hook-registry" in validated.stdout
+
+    def test_prune_removes_only_what_a_recorded_sync_deployed(self, layout) -> None:
+        """#13: across Claude Code and Codex, a command and an agent the user made by hand survive prune; the ones a sync deployed and the source then dropped go."""
+        base, source, home, _decoy, environment = layout
+        (home / ".codex").mkdir()
+        policy = json.loads((source / "permissions.json").read_text())
+        policy["runtimeDirectories"].append("~/.codex")
+        (source / "permissions.json").write_text(json.dumps(policy))
+        (source / "commands").mkdir()
+        (source / "commands" / "old.md").write_text("---\ndescription: Old\n---\n\nDo the old thing.\n")
+        (source / "agents").mkdir()
+        (source / "agents" / "old-agent.md").write_text("---\nname: old-agent\ndescription: Old agent\ntools: Read\n---\n\nBe old.\n")
+        applied = self.run(base, source, environment)
+        assert applied.returncode == 0, applied.stdout + applied.stderr
+        deployed = [home / ".claude" / "commands" / "old.md", home / ".claude" / "agents" / "old-agent.md", home / ".codex" / "prompts" / "old.md"]
+        for path in deployed:
+            assert path.is_file(), applied.stdout + applied.stderr
+        hand_made = [home / ".claude" / "commands" / "personal.md", home / ".claude" / "agents" / "mine.md", home / ".codex" / "prompts" / "personal.md"]
+        for path in hand_made:
+            path.write_text("mine\n")
+        (source / "commands" / "old.md").unlink()
+        (source / "agents" / "old-agent.md").unlink()
+        preview = self.run(base, source, environment, "--prune", "--dry-run")
+        assert preview.returncode == 0, preview.stdout + preview.stderr
+        for path in hand_made:
+            assert f"unmanaged: {path}" in preview.stdout, preview.stdout
+        pruned = self.run(base, source, environment, "--prune")
+        assert pruned.returncode == 0, pruned.stdout + pruned.stderr
+        for path in hand_made:
+            assert path.read_text() == "mine\n"
+        for path in deployed:
+            assert not path.exists(), pruned.stdout
+        # Each deleted file can be copied back from the backup.
+        backups = home / ".stratarc" / "backups" / "prune"
+        assert len(list(backups.glob("*/codex/prompts/old.md"))) == 1
+        assert len(list(backups.glob("*/claude/agents/old-agent.md"))) == 1
+
     def test_the_module_runs_as_a_script_entry_point(self, layout) -> None:
         base, source, _home, _decoy, environment = layout
         result = self.run(base, source, environment, "--list")
@@ -1754,6 +1850,39 @@ class TestAdapterGate:
         assert messages_recovery("msg-1114") in err
         assert calls == []
 
+    def test_an_undetected_version_warns_once_and_deploys(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        """#19: an adapter that declares a range cannot check it against an unknown version, and says so."""
+        from stratarc import registry
+
+        root, calls, configure = world
+        configure(supports=">=1")
+        monkeypatch.setattr(registry, "detect_versions", lambda: {"fixture": None})
+        code, _out, err = run_main("--root", str(root))
+        assert code == 0, err
+        assert err.count("warning msg-1156") == 1
+        assert 'declares >=1, but the installed fixture version is not known, so the range was not checked' in err
+        assert calls == [False]
+
+    def test_strict_versions_refuses_an_undetected_version(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        from stratarc import registry
+
+        root, calls, configure = world
+        configure(supports=">=1")
+        monkeypatch.setattr(registry, "detect_versions", lambda: {"fixture": None})
+        code, _out, err = run_main("--root", str(root), "--strict-versions")
+        assert code == 5
+        assert "error msg-1156" in err
+        assert calls == []
+
+    def test_an_adapter_that_supports_any_version_has_nothing_to_warn_about(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        from stratarc import registry
+
+        root, calls, configure = world
+        configure()
+        monkeypatch.setattr(registry, "detect_versions", lambda: {"fixture": None})
+        code, _out, err = run_main("--root", str(root), "--strict-versions")
+        assert code == 0 and "msg-1156" not in err
+
     def test_a_read_only_run_is_not_gated(self, world) -> None:
         root, calls, configure = world
         configure(supports=">=3")
@@ -1971,3 +2100,132 @@ class TestVerifyAfterDeploy:
         root, _target, scopes, _run = world
         assert run_main("--root", str(root))[0] == 0
         assert scopes == []
+
+
+# ---------------------------------------------------------------------------
+# preflight and the partial-failure account (#17)
+# ---------------------------------------------------------------------------
+
+
+class TestPreflightAndPartialFailure:
+    """Predictable failures stop a write run before any runtime is written; a late failure is reported target by target, and --rollback-on-drift puts back the runtimes already written."""
+
+    @pytest.fixture
+    def world(self, tmp_path: Path, stratarc_home: Path):
+        root = tmp_path / "source"
+        shutil.copytree(SYNC_SOURCE, root)
+        policy = json.loads((root / "permissions.json").read_text())
+        policy["runtimeDirectories"].append("~/.codex")
+        (root / "permissions.json").write_text(json.dumps(policy))
+        claude, codex = stratarc_home / ".claude", stratarc_home / ".codex"
+        claude.mkdir()
+        codex.mkdir()
+        # A file the user keeps in the Claude Code target, which a restoration must leave alone.
+        (claude / "settings.json").write_text('{"theme": "dark"}\n')
+        return root, claude, codex, stratarc_home
+
+    @staticmethod
+    def account(home: Path) -> dict:
+        return json.loads((home / ".stratarc" / "state" / "deploy-last.json").read_text())
+
+    @staticmethod
+    def states(body: dict) -> dict[str, str]:
+        return {f"{t['area']}:{t['name']}": t["state"] for t in body["targets"]}
+
+    def test_a_predictable_failure_writes_nothing_to_any_runtime(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        root, claude, codex, home = world
+        real = sync.unmapped_hook_events
+        monkeypatch.setattr(sync, "unmapped_hook_events", lambda stage, name, maps=None: {"Stop"} if name == "codex" else real(stage, name))
+        before = (tree_snapshot(claude), tree_snapshot(codex))
+        code, _out, err = run_main("--root", str(root))
+        assert code == 2, err
+        assert "preflight: refusing to deploy; nothing was written" in err
+        assert (tree_snapshot(claude), tree_snapshot(codex)) == before
+        body = self.account(home)
+        assert body["result"] == "failed"
+        assert self.states(body) == {"runtime:codex": "failed", "runtime:claude": "not-attempted", "projects:delivery": "not-attempted"}
+
+    def test_a_late_failure_is_a_partial_deployment_with_a_complete_account(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        from stratarc.adapters import _components, codex as codex_adapter
+
+        root, claude, codex, home = world
+
+        def refuse(source, target, dry_run=False):
+            raise _components.RenderRefused("config.toml cannot be rewritten safely")
+
+        monkeypatch.setattr(codex_adapter, "sync", refuse)
+        code, _out, err = run_main("--root", str(root))
+        assert code == 2
+        assert "sync: deployment: partial" in err
+        body = self.account(home)
+        assert body["result"] == "partial"
+        assert self.states(body) == {"runtime:claude": "changed", "runtime:codex": "failed", "projects:delivery": "not-attempted"}
+        assert (claude / "AGENTS.md").is_file()
+
+    def test_rollback_restores_the_runtimes_already_written_and_is_safe_to_repeat(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        from stratarc.adapters import _components, codex as codex_adapter
+
+        root, claude, codex, home = world
+        before = tree_snapshot(claude)
+
+        def refuse(source, target, dry_run=False):
+            if dry_run:
+                return []
+            raise _components.RenderRefused("config.toml cannot be rewritten safely")
+
+        monkeypatch.setattr(codex_adapter, "sync", refuse)
+        for _ in range(2):
+            code, _out, err = run_main("--root", str(root), "--rollback-on-drift")
+            assert code == 2, err
+            body = self.account(home)
+            assert body["result"] == "restored"
+            assert self.states(body)["runtime:claude"] == "restored"
+            after = tree_snapshot(claude)
+            # Only the deploy stamp a successful runtime write leaves is not a restored file; nothing else changed.
+            after.pop(".stratarc-deploy.json", None)
+            assert after == before
+
+    def test_a_restoration_that_cannot_complete_exits_five(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        from stratarc.adapters import _components, codex as codex_adapter
+
+        root, claude, codex, home = world
+        monkeypatch.setattr(codex_adapter, "sync", lambda source, target, dry_run=False: (_ for _ in ()).throw(_components.RenderRefused("no")) if not dry_run else [])
+        monkeypatch.setattr(sync, "_roll_back", lambda state: False)
+        code, _out, err = run_main("--root", str(root), "--rollback-on-drift")
+        assert code == 5, err
+        assert self.account(home)["result"] == "restore-failed"
+
+    def test_a_complete_deployment_is_recorded_as_complete_and_prints_no_account(self, world) -> None:
+        root, claude, codex, home = world
+        code, _out, err = run_main("--root", str(root))
+        assert code == 0, err
+        assert "sync: deployment:" not in err
+        body = self.account(home)
+        assert body["result"] == "complete"
+        assert self.states(body)["runtime:claude"] == "changed" and self.states(body)["projects:permissions"] == "done"
+
+
+class TestPreviewMatchesTheWrite:
+    """#20: `diff` on a source root whose control plane is stale previews the writes `sync` will make after it reconciles."""
+
+    def test_a_fresh_scaffold_previews_the_instruction_file_it_replaces(self, tmp_path: Path, stratarc_home: Path) -> None:
+        environment = {key: value for key, value in os.environ.items() if not key.startswith(("GIT_", "STRATARC_"))}
+        environment.update(HOME=str(stratarc_home), STRATARC_HOME=str(stratarc_home), PYTHONPATH=str(REPO_ROOT))
+        (stratarc_home / ".claude").mkdir()
+        (stratarc_home / ".claude" / "CLAUDE.md").write_text("my own notes\n")
+        source = tmp_path / "source"
+
+        def stratarc(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run([sys.executable, "-m", "stratarc", *args], capture_output=True, text=True, env=environment, cwd=tmp_path, timeout=120)
+
+        assert stratarc("init", str(source)).returncode == 0
+        plane = source / "projects" / "roots" / "control-plane.md"
+        before = plane.read_bytes()
+        preview = stratarc("--root", str(source), "diff")
+        assert preview.returncode == 0, preview.stdout + preview.stderr
+        assert "would copy ~/.claude/CLAUDE.md" in preview.stdout, preview.stdout
+        assert plane.read_bytes() == before
+        assert (stratarc_home / ".claude" / "CLAUDE.md").read_text() == "my own notes\n"
+        deployed = stratarc("--root", str(source), "sync")
+        assert deployed.returncode == 0, deployed.stdout + deployed.stderr
+        assert "copy ~/.claude/CLAUDE.md" in deployed.stdout

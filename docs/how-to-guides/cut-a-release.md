@@ -22,14 +22,14 @@ These steps are done once, by the repository owner, before the first release tha
 4. Run the full test suite, including the slow wheel test:
 
 ```bash
-cd stratarc && python3 -P -m pytest
+cd ~/stratarc && python3 -P -m pytest
 ```
 
 5. Commit as `chore: release <version>` and merge it through a pull request like any other change.
 6. Tag the merge commit `v<version>` and push the tag:
 
 ```bash
-cd stratarc && git tag -a v<version> -m "stratarc <version>" && git push origin v<version>
+cd ~/stratarc && git tag -a v<version> -m "stratarc <version>" && git push origin v<version>
 ```
 
 7. The release workflow starts on the tag. Its build job refuses a tag that is not on `main` or does not match `__version__`, builds the distributions with hash pinned tools and records their checksums in the job summary. Its test job installs the built wheel and runs the suite against it. Its publish job waits for your approval in the `pypi` environment; approve it once the first two jobs are green.
@@ -42,7 +42,7 @@ The project page shows the README, so every link in it must be absolute, and the
 `requirements/build.txt` and `requirements/ci.txt` pin every tool the workflow installs, with hashes. They are compiled from `requirements/build.in` and `requirements/ci.in`. To update them, edit the `.in` file and recompile:
 
 ```bash
-cd stratarc && python3 -m pip install pip-tools && pip-compile --generate-hashes --strip-extras --output-file=requirements/ci.txt requirements/ci.in
+cd ~/stratarc && python3 -m pip install pip-tools && pip-compile --generate-hashes --strip-extras --output-file=requirements/ci.txt requirements/ci.in
 ```
 
 ## After the Release

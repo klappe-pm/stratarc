@@ -5,7 +5,7 @@ Thank you for helping improve Stratarc. Open an issue to discuss a change before
 ## Setup
 
 ```bash
-git clone https://github.com/klappe-pm/stratarc && cd stratarc && python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[test]'
+git clone https://github.com/klappe-pm/stratarc ~/stratarc && cd ~/stratarc && python3 -m venv .venv && .venv/bin/pip install -e '.[test]'
 ```
 
 ## Tests
@@ -13,11 +13,11 @@ git clone https://github.com/klappe-pm/stratarc && cd stratarc && python3 -m ven
 Run the suite before every commit. The slow marker builds a wheel and installs it into a fresh virtual environment. [Run the Tests](docs/how-to-guides/run-the-tests.md) covers the other checks.
 
 ```bash
-python3 -m pytest
+cd ~/stratarc && .venv/bin/python -m pytest
 ```
 
 ```bash
-python3 -m pytest -m 'not slow'
+cd ~/stratarc && .venv/bin/python -m pytest -m 'not slow'
 ```
 
 ## Guidelines

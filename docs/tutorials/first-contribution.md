@@ -10,7 +10,7 @@ This tutorial takes you from a fresh clone to a change that is ready for review.
 ## Clone and Install
 
 ```bash
-git clone https://github.com/klappe-pm/stratarc && cd stratarc && python3 -m venv .venv && . .venv/bin/activate && pip install -e '.[test]'
+git clone https://github.com/klappe-pm/stratarc ~/stratarc && cd ~/stratarc && python3 -m venv .venv && .venv/bin/pip install -e '.[test]'
 ```
 
 This installs Stratarc as an editable package with `pytest` and `jsonschema`, the only test dependencies. The command itself has no runtime dependencies.
@@ -18,13 +18,13 @@ This installs Stratarc as an editable package with `pytest` and `jsonschema`, th
 ## Run the Tests
 
 ```bash
-cd stratarc && python3 -m pytest
+cd ~/stratarc && .venv/bin/python -m pytest
 ```
 
 The full suite includes one slow test that builds a wheel, installs it into a fresh virtual environment and checks that the installed command scaffolds a source root and syncs a runtime of your own. While iterating, skip it:
 
 ```bash
-cd stratarc && python3 -m pytest -m 'not slow'
+cd ~/stratarc && .venv/bin/python -m pytest -m 'not slow'
 ```
 
 Run the full suite before you commit. See [Run the Tests](../how-to-guides/run-the-tests.md) for the other checks.
@@ -38,13 +38,13 @@ Two conventions catch newcomers. Runtime assets under `stratarc/data/` are reach
 ## Check It
 
 ```bash
-cd stratarc && python3 -m pytest
+cd ~/stratarc && .venv/bin/python -m pytest
 ```
 
 If you changed a command, an option or a message, regenerate the two reference pages that come from the code and commit the result:
 
 ```bash
-cd stratarc && python3 scripts/docs/generate-reference.py
+cd ~/stratarc && .venv/bin/python scripts/docs/generate-reference.py
 ```
 
 ## Commit

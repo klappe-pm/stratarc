@@ -325,3 +325,20 @@ def test_the_registry_check_reports_a_missing_remote(world, capsys):
     write(world.config / "remotes.json", json.dumps({"alpha": "a/a", "stratarc-lib": "a/l"}))
     assert world.run("--registry-check") == 1
     assert capsys.readouterr().out.splitlines() == ["registry: zulu: in the control plane but has no remotes.json entry"]
+
+
+def test_a_flat_projects_root_uses_the_checkout_at_its_top(world):
+    """A projects root with no status folders holds checkouts directly, as reconcile reads it."""
+    checkout = world.projects / "bravo"
+    (checkout / ".git").mkdir(parents=True)
+    assert world.run("--new", "bravo") == 0
+    assert (checkout / ".gitignore").is_file()
+    assert not (world.projects / "active").exists()
+
+
+def test_the_bundled_template_keeps_workflows_toml_in_roots_and_copies_it_only_on_request(world):
+    write(world.root / "templates" / "project" / "roots" / "workflows.toml", "[workflows]\nenabled = false\n")
+    assert world.run("--new", "bravo") == 0
+    assert not (world.config / "bravo" / "workflows.toml").exists()
+    assert world.run("--new", "charlie", "--workflows") == 0
+    assert (world.config / "charlie" / "workflows.toml").read_text() == "[workflows]\nenabled = false\n"

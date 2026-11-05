@@ -136,3 +136,88 @@ def test_the_module_loads_the_reader_from_package_data():
     assert Path(public_targets._module.__file__).as_posix().endswith("stratarc/data/hooks/lib/public-targets.py")
     for name in public_targets.__all__:
         assert hasattr(public_targets, name)
+
+
+# ----- the list follows the source root's layout -----
+
+_INIT_LAYOUT = '[layout]\nproject_config_dir = "projects/roots"\ncontrol_plane = "projects/roots/control-plane.md"\n'
+
+
+def test_the_list_is_read_from_the_configured_project_config_dir(tmp_path: Path) -> None:
+    """The layout `stratarc init` writes keeps the list in projects/roots/, where `stratarc projects new --public` puts it."""
+    source = tmp_path / "source"
+    (source / "projects" / "roots").mkdir(parents=True)
+    (source / "stratarc.toml").write_text(_INIT_LAYOUT)
+    (source / "projects" / "roots" / "public-targets.json").write_text('["published"]\n')
+    assert public_targets.load_public_targets(source) == frozenset({"published"})
+
+
+def test_a_list_left_at_the_old_location_still_counts(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "projects" / "roots").mkdir(parents=True)
+    (source / "projects-root").mkdir()
+    (source / "stratarc.toml").write_text(_INIT_LAYOUT)
+    (source / "projects" / "roots" / "public-targets.json").write_text('["new-one"]\n')
+    (source / "projects-root" / "public-targets.json").write_text('["old-one"]\n')
+    assert public_targets.load_public_targets(source) == frozenset({"new-one", "old-one"})
+
+
+def test_a_broken_list_in_the_configured_directory_names_its_path(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "projects" / "roots").mkdir(parents=True)
+    (source / "stratarc.toml").write_text(_INIT_LAYOUT)
+    (source / "projects" / "roots" / "public-targets.json").write_text("{nope")
+    with pytest.raises(public_targets.PublicTargetsUnreadable, match="projects/roots/public-targets.json"):
+        public_targets.load_public_targets(source)
+
+
+def test_an_unparseable_stratarc_toml_fails_closed(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "stratarc.toml").write_text("[layout\n")
+    with pytest.raises(public_targets.PublicTargetsUnreadable, match="stratarc.toml"):
+        public_targets.load_public_targets(source)
+
+
+def test_without_tomllib_the_layout_line_is_still_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A deployed hook may run under a python3 older than 3.11."""
+    import builtins
+
+    source = tmp_path / "source"
+    (source / "projects" / "roots").mkdir(parents=True)
+    (source / "stratarc.toml").write_text(_INIT_LAYOUT)
+    real_import = builtins.__import__
+
+    def no_tomllib(name, *args, **kwargs):
+        if name == "tomllib":
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_tomllib)
+    assert public_targets._module.project_config_dir(source) == "projects/roots"
+
+
+def test_reconcile_in_a_scaffolded_root_gives_a_public_checkout_no_column(tmp_path: Path) -> None:
+    """End to end from `stratarc init`: a checkout listed in projects/roots/public-targets.json receives no row, column or snapshot."""
+    import sys
+
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = {key: value for key, value in os.environ.items() if not key.startswith(("GIT_", "STRATARC_"))}
+    environment.update(HOME=str(home), STRATARC_HOME=str(home))
+    source = home / "stratarc-source"
+
+    def stratarc(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, "-m", "stratarc", *args], capture_output=True, text=True, env=environment, cwd=home, timeout=120)
+
+    assert stratarc("init", str(source)).returncode == 0
+    projects = home / "projects"
+    for name in ("published", "private-one"):
+        _checkout(projects / name)
+    (source / "projects" / "roots" / "public-targets.json").write_text('["published"]\n')
+    result = stratarc("--root", str(source), "reconcile")
+    assert result.returncode == 0, result.stdout + result.stderr
+    plane = (source / "projects" / "roots" / "control-plane.md").read_text()
+    assert "private-one" in plane
+    assert "published" not in plane
+    assert not (projects / "published" / "local").exists()

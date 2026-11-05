@@ -1,6 +1,6 @@
 # schema
 
-`hooks.schema.json` validates `hooks/hooks.json`, the canonical hook registry: each of the eight canonical events maps to a list of hook groups, each group carries an optional tool `matcher` and a non-empty list of command hooks with an optional timeout in seconds. No engine validator reads this file directly, so the schema encodes the shape the staging filter and the runtime adapters rely on.
+`hooks.schema.json` validates `hooks/hooks.json`, the canonical hook registry: each of the eight canonical events maps to a list of hook groups, each group carries an optional tool `matcher` and a non-empty list of command hooks with an optional timeout in seconds. The `hook-registry` check in `stratarc/validate.py` enforces the same contract with the standard library on every `validate`, `sync`, `check` and `diff`, and the tests hold the two in agreement.
 
 `permissions.schema.json` validates `permissions.json`, the single permission policy every adapter translates: `schemaVersion` 1, the `allow`, `deny` and `ask` rule lists, the writable runtime directories, the Codex approval policy, network and shell environment settings, and the auto-mode guidance block. Unknown top-level keys are accepted, matching the engine's loader.
 

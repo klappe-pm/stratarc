@@ -328,6 +328,10 @@ def _sync_family_argv(args: argparse.Namespace) -> list[str]:
         argv.append("--verify")
     if getattr(args, "rollback_on_drift", False):
         argv.append("--rollback-on-drift")
+    if getattr(args, "require_complete", False):
+        argv.append("--require-complete")
+    if getattr(args, "strict_versions", False):
+        argv.append("--strict-versions")
     if args.only:
         argv += ["--only", args.only]
     return argv
@@ -565,7 +569,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = _add_command(sub, "sync", "render the source into every enabled runtime and managed project")
     p.add_argument("--verify", action="store_true", help="after the write, verify the change against what is deployed; exit 6 on drift")
-    p.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift, restore the runtime files from the home backups (implies --verify)")
+    p.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift or a runtime write fails, restore the runtime files from the home backups (implies --verify)")
+    p.add_argument("--require-complete", action="store_true", help="exit 5 unless verification compared every expected runtime and project (implies --verify)")
+    p.add_argument("--strict-versions", action="store_true", help="refuse a runtime whose installed version cannot be detected when its adapter declares a supported range")
     p.add_argument("--only", metavar="RUNTIME", help="sync one runtime and skip project delivery")
     p.add_argument("--dry-run", action="store_true", help="print what a sync would change and write nothing")
     p.add_argument("--list", action="store_true", help="list the runtimes and whether each target exists")

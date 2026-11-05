@@ -131,6 +131,8 @@ class DeployState:
 
     verify: bool = False
     rollback: bool = False
+    require_complete: bool = False
+    strict_versions: bool = False
     cause_id: str = ""
     deployed: bool = False
     warned: set[str] = dataclasses.field(default_factory=set)
@@ -217,11 +219,14 @@ def _adapter_gate(runtime: str, state: DeployState) -> tuple[bool, list[str]]:
     allowed, shown = True, []
     for manifest in manifests:
         status = registry.evaluate(manifest, installed)
-        decision = registry.sync_gate(status, state.warned)
+        decision = registry.sync_gate(status, state.warned, strict=state.strict_versions)
         allowed = allowed and decision.allowed
         if decision.message:
-            blocked = decision.state == registry.UNSUPPORTED
-            message = CliError("msg-1114" if blocked else "msg-1115", param="adapter", detail=f'The adapter "{status.name}": {status.detail}')
+            blocked = not decision.allowed
+            if decision.state == registry.UNKNOWN:
+                message = CliError("msg-1156", param="adapter", detail=decision.message)
+            else:
+                message = CliError("msg-1114" if blocked else "msg-1115", param="adapter", detail=f'The adapter "{status.name}": {status.detail}')
             shown.append(f"{'error' if blocked else 'warning'} {message.id}  {message.problem}\n  {message.recovery}")
     return allowed, shown
 
@@ -320,12 +325,107 @@ def _verify_deployment(root: pathlib.Path, state: DeployState) -> int:
         print("sync: verify: " + verify.format_report(report.to_dict()).replace("\n", "\nsync: verify: "))
     drifted = sum(report.counts[verify.DRIFTED] for report in reports)
     if not drifted:
+        if state.require_complete:
+            short_of = [report for report in reports if not report.complete]
+            if short_of:
+                missing = [item["target"] for report in short_of for item in report.coverage()["skipped"]]
+                detail = ", ".join(missing) if missing else "no target was compared"
+                error = CliError("msg-1155", param="coverage", detail=detail)
+                print(f"error {error.id}  {error.problem}\n  {error.recovery}", file=sys.stderr)
+                return UNAVAILABLE
         return 0
     drift = CliError("msg-1117", param="drift", detail=f"{drifted} file(s)")
     print(f"error {drift.id}  {drift.problem}\n  {drift.recovery}", file=sys.stderr)
     if state.rollback and not _roll_back(state):
         return UNAVAILABLE
     return DRIFT
+
+
+@dataclasses.dataclass
+class DeployAccount:
+    """What a write run did to each target, for the partial-failure report.
+
+    Each target is a runtime, project delivery or the permission sweep, in a
+    state of changed, current, done, failed, not-attempted, restored or
+    restore-failed. The result is complete when nothing failed, failed when
+    nothing was written before the failure, partial when something was, and
+    restored or restore-failed after a rollback of the runtimes written.
+    """
+
+    targets: list[dict] = dataclasses.field(default_factory=list)
+
+    def add(self, area: str, name: str, state: str, reason: str, target: pathlib.Path | str = "") -> None:
+        self.targets.append({"area": area, "name": name, "state": state, "reason": reason, "target": str(target)})
+
+    def written(self) -> list[dict]:
+        return [t for t in self.targets if t["state"] in ("changed", "done")]
+
+    def result(self) -> str:
+        states = {t["state"] for t in self.targets}
+        if "restore-failed" in states:
+            return "restore-failed"
+        if "restored" in states:
+            return "restored"
+        if "failed" not in states:
+            return "complete"
+        return "partial" if self.written() else "failed"
+
+    def finish(self, *, stdout: bool = False) -> None:
+        """Print the account when anything failed, and write it to <home>/.stratarc/state/deploy-last.json."""
+        result = self.result()
+        if result != "complete" or stdout:
+            stream = sys.stderr
+            print(f"sync: deployment: {result}", file=stream)
+            for t in self.targets:
+                reason = f" ({t['reason']})" if t["reason"] else ""
+                print(f"sync: deployment: {t['state']}: {t['area']}:{t['name']}{reason}", file=stream)
+        path = home() / ".stratarc" / "state" / "deploy-last.json"
+        body = {
+            "schema": 1,
+            "ts": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "result": result,
+            "targets": self.targets,
+        }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(path.name + ".tmp")
+            temporary.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(path)
+        except OSError as error:
+            print(f"sync: deployment: the account could not be written to {short(path)}: {error.strerror or error}", file=sys.stderr)
+
+
+def _unwritable(target: pathlib.Path) -> pathlib.Path | None:
+    """The target, or its nearest existing parent, when this process cannot write to it."""
+    probe = target
+    while not probe.exists():
+        if probe.parent == probe:
+            return None
+        probe = probe.parent
+    return None if os.access(probe, os.W_OK | os.X_OK) else probe
+
+
+def _partial_failure(account: DeployAccount, state: DeployState, code: int) -> int:
+    """Report a write run that failed after preflight, and with --rollback-on-drift put back the runtimes it wrote.
+
+    Returns code, or UNAVAILABLE when a restoration was attempted and could not be completed. Project checkouts and source-root files are never rolled back.
+    """
+    from stratarc.messages import UNAVAILABLE
+
+    if state.rollback and state.backups:
+        from stratarc import deploy_ledger
+
+        created = [str(path) for path, backup in state.backups.items() if backup is None]
+        restored = _roll_back(state)
+        # A file the rollback removed is no longer Stratarc's to prune.
+        deploy_ledger.forget_everywhere(created)
+        for t in account.targets:
+            if t["area"] == "runtime" and t["state"] == "changed":
+                t["state"] = "restored" if restored else "restore-failed"
+        account.finish()
+        return code if restored else UNAVAILABLE
+    account.finish()
+    return code
 
 
 def present_action(action: str, stage: pathlib.Path) -> str:
@@ -488,6 +588,9 @@ def detected(
 _REVERSE_PASS_HEADINGS = [
     ("orphan", "orphan"),
     ("retired", "retired"),
+    # An entry in an owned directory the deploy ledger never recorded:
+    # informational, never pruned.
+    ("unmanaged", "unmanaged"),
     ("excluded", "excluded"),
     ("foreign_hook_group", "foreign hook group"),
     ("dangling", "dangling registration"),
@@ -652,6 +755,7 @@ def reverse_pass(
     live: dict[str, tuple[str, pathlib.Path]],
     *,
     home: pathlib.Path | None = None,
+    ledger: dict[str, set[str]] | None = None,
 ) -> dict[str, list[Finding]]:
     """Classify everything present in every owned directory and hook
     registry of every live runtime, and, given a home, everything external.
@@ -674,6 +778,11 @@ def reverse_pass(
     environment and header value scanned for literal secrets. home is
     explicit so a fixture never reads the real machine; the sync passes
     the resolved home.
+
+    With ledger set (deploy_ledger.load()), an entry the current source
+    does not produce is an orphan only when the ledger records that a write
+    run deployed it; any other is unmanaged, which is reported and never
+    pruned. Without it, every such entry is an orphan, as before the ledger.
     """
     from stratarc.adapters._common import classify_registration, owned_dir_entries, source_hook_names
     from stratarc.adapters._inventory import hook_entry, machine_inventory, skill_entry
@@ -719,6 +828,9 @@ def reverse_pass(
                             )
                         continue
                     kind = "retired" if od.kind == "rule" and entry in retired else "orphan"
+                    if kind == "orphan" and ledger is not None and str(p) not in ledger.get(name, set()):
+                        items.append(Finding(name, "unmanaged", f"{p} (not in the deploy ledger; left in place)"))
+                        continue
                     items.append(Finding(name, kind, str(p), path=p))
 
         registry_name = registries.get(name)
@@ -881,14 +993,55 @@ def _remove_dangling_registrations(
     registry_path.write_text(json.dumps(data, indent=2) + "\n")
 
 
+def _record_deployed(adapter, name: str, stage: pathlib.Path, target: pathlib.Path) -> None:
+    """Add what this write run rendered into the runtime's owned directories to the deploy ledger."""
+    owner = getattr(adapter, "owned_outputs", None)
+    if owner is None:
+        return
+    from stratarc import deploy_ledger
+
+    deploy_ledger.record(name, deploy_ledger.produced_paths(owner(stage, target)))
+
+
+def _ownership_evidence(f: Finding) -> str:
+    """Why prune may delete what a finding names, printed beside it in a dry run."""
+    return {
+        "orphan": " (deployed by a recorded sync; the source no longer produces it)",
+        "retired": " (named in rules/retired.json)",
+        "dangling": " (its script does not exist)",
+        "returned": " (declared wanted: false in components.json)",
+    }.get(f.kind, "")
+
+
+def _prune_backup(f: Finding, live: dict[str, tuple[str, pathlib.Path]], backup_root: pathlib.Path) -> None:
+    """Copy what one finding names into the prune backup, keeping symlinks as links."""
+    assert f.path is not None
+    target = live.get(f.runtime, ("", None))[1]
+    try:
+        rel = f.path.relative_to(target) if target is not None else pathlib.Path(f.path.name)
+    except ValueError:
+        rel = pathlib.Path(f.path.name)
+    destination = backup_root / f.runtime / rel
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if f.path.is_dir() and not f.path.is_symlink():
+        shutil.copytree(f.path, destination, symlinks=True, dirs_exist_ok=True)
+    else:
+        shutil.copy2(f.path, destination, follow_symlinks=False)
+
+
 def run_prune(root: pathlib.Path, live: dict[str, tuple[str, pathlib.Path]], *, dry_run: bool) -> int:
     """Delete every orphan, retired and dangling-registration finding.
 
     Reverse-pass only: no forward sync, no project or permission sweep.
     A real run appends the list it is about to delete to
-    ~/.stratarc/telemetry/prune-<date>.txt before deleting anything,
-    so every run that day stays recoverable from the runtime's own history. A dry run
-    prints "would delete" lines and writes nothing.
+    ~/.stratarc/telemetry/prune-<date>.txt and copies every file it is about
+    to delete under ~/.stratarc/backups/prune/<run time>/<runtime>/ before
+    deleting anything. A dry run prints "would delete" lines, each with its
+    ownership evidence, and writes nothing.
+
+    An orphan is deleted only when the deploy ledger records that a write
+    run deployed it (stratarc/deploy_ledger.py); anything else in an owned
+    directory is unmanaged, named and left in place.
     """
     from stratarc.control_plane import ControlPlane
     from stratarc.staging import build_stage, cleanup_all
@@ -919,11 +1072,19 @@ def run_prune(root: pathlib.Path, live: dict[str, tuple[str, pathlib.Path]], *, 
     if cp.rows:
         live = {k: v for k, v in live.items() if cp.enabled("global", f"runtime:{k}")}
 
+    from stratarc import deploy_ledger
+
     stage, _notes = build_stage(root, cp, "global")
     try:
-        findings = reverse_pass(root, stage, live, home=home())
+        findings = reverse_pass(root, stage, live, home=home(), ledger=deploy_ledger.load())
     finally:
         cleanup_all()
+
+    for f in sorted(
+        (f for items in findings.values() for f in items if f.kind == "unmanaged"),
+        key=lambda f: (f.runtime, f.label),
+    ):
+        print(f"sync: prune: not pruned {f.runtime}: unmanaged: {f.label}")
 
     # A returned skill or hook group is pruned like an orphan: a wanted: false
     # group is removed. A returned item in a runtime-native file this source
@@ -952,7 +1113,7 @@ def run_prune(root: pathlib.Path, live: dict[str, tuple[str, pathlib.Path]], *, 
 
     if dry_run:
         for f in sorted(to_delete, key=lambda f: (f.runtime, f.kind, f.label)):
-            print(f"sync: would delete {f.runtime}: {f.kind}: {f.label}")
+            print(f"sync: would delete {f.runtime}: {f.kind}: {f.label}{_ownership_evidence(f)}")
         return 0
 
     telemetry_dir = home() / ".stratarc" / "telemetry"
@@ -963,23 +1124,43 @@ def run_prune(root: pathlib.Path, live: dict[str, tuple[str, pathlib.Path]], *, 
     # erase the list that makes the first one recoverable. Each run opens
     # with its own timestamped header line.
     run_at = datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()
+    # Every file prune deletes is copied here first, under its runtime and
+    # its path inside that runtime's target, so it can be copied back.
+    # A registration prune removes is recoverable from the list itself.
+    backup_root = home() / ".stratarc" / "backups" / "prune" / run_at.replace(":", "")
+    suffix = 1
+    while backup_root.exists():
+        suffix += 1
+        backup_root = backup_root.with_name(f"{run_at.replace(':', '')}-{suffix}")
+    backed_up = False
+    for f in to_delete:
+        if f.path is not None and (f.path.exists() or f.path.is_symlink()):
+            _prune_backup(f, live, backup_root)
+            backed_up = True
     with telemetry_path.open("a", encoding="utf-8") as handle:
         handle.write(
             f"# prune run {run_at}\n"
+            + (f"# backup {backup_root}\n" if backed_up else "")
             + "".join(
                 f"{f.runtime} {f.kind} {f.label}\n"
                 for f in sorted(to_delete, key=lambda f: (f.runtime, f.kind, f.label))
             )
         )
     print(f"sync: prune: appended to {short(telemetry_path)}")
+    if backed_up:
+        print(f"sync: prune: copies of the deleted files are in {short(backup_root)}")
 
+    deleted: dict[str, list[str]] = {}
     for f in to_delete:
         if f.kind in ("orphan", "retired", "returned") and f.path is not None:
             if f.path.is_dir() and not f.path.is_symlink():
                 shutil.rmtree(f.path)
             elif f.path.exists() or f.path.is_symlink():
                 f.path.unlink()
+            deleted.setdefault(f.runtime, []).append(str(f.path))
             print(f"sync: {f.runtime}: deleted {f.label}")
+    for runtime, paths in deleted.items():
+        deploy_ledger.forget(runtime, paths)
 
     by_registry: dict[pathlib.Path, list[Finding]] = {}
     for f in to_delete:
@@ -1033,6 +1214,29 @@ def refuse_on_invalid_source(root: pathlib.Path) -> int | None:
         )
         return code
     return None
+
+
+def _reconciled_preview(root: pathlib.Path):
+    """The control plane reconcile would write for root, parsed from a scratch copy, or None when it cannot be rendered."""
+    from stratarc import reconcile
+    from stratarc.control_plane import ControlPlane
+
+    saved = reconcile._root_flag
+    try:
+        reconcile.configure_root(root)
+        document, _notes = reconcile.render(ControlPlane.load(control_plane_file(root)), reconcile.load_rule_tiers())
+    except Exception as error:  # the preview falls back to the file on disk and says so
+        print(f"sync: control-plane: the reconciled preview could not be rendered ({type(error).__name__}); previewing the file on disk", file=sys.stderr)
+        return None
+    finally:
+        reconcile._root_flag = saved
+    scratch = pathlib.Path(tempfile.mkdtemp(prefix="stratarc-plane-"))
+    try:
+        path = scratch / control_plane_file(root).name
+        path.write_text(document, encoding="utf-8")
+        return ControlPlane.load(path)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def run_reconcile(root: pathlib.Path, check: bool) -> int:
@@ -1115,7 +1319,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--prune", action="store_true")
     ap.add_argument("--dry-run", action="store_true", help="with --prune, list what would be deleted; alone, the same as --diff")
     ap.add_argument("--verify", action="store_true", help="after the write, verify this run's change against what is deployed; exit 6 on drift")
-    ap.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift, restore the runtime files from the home backups (implies --verify)")
+    ap.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift or a runtime write fails, restore the runtime files from the home backups (implies --verify)")
+    ap.add_argument("--require-complete", action="store_true", help="exit 5 unless verification compared every expected runtime and project (implies --verify)")
+    ap.add_argument("--strict-versions", action="store_true", help="refuse a runtime whose installed version cannot be detected when its adapter declares a supported range")
     ap.add_argument(
         "--root",
         metavar="PATH",
@@ -1133,7 +1339,13 @@ def main(argv: list[str] | None = None) -> int:
 
 def run(args: argparse.Namespace, root: pathlib.Path) -> int:
     rollback = bool(getattr(args, "rollback_on_drift", False))
-    state = DeployState(verify=bool(getattr(args, "verify", False)) or rollback, rollback=rollback)
+    require_complete = bool(getattr(args, "require_complete", False))
+    state = DeployState(
+        verify=bool(getattr(args, "verify", False)) or rollback or require_complete,
+        rollback=rollback,
+        require_complete=require_complete,
+        strict_versions=bool(getattr(args, "strict_versions", False)),
+    )
     code = _run(args, root, state)
     if code == 0 and state.verify and state.deployed:
         return _verify_deployment(root, state)
@@ -1154,10 +1366,10 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
     # what would change and exits 0. Neither writes anything.
     read_only = args.check or diff
     if state.verify and (read_only or args.prune or args.list):
-        print("sync: --verify and --rollback-on-drift apply to a write run, not --check, --diff, --prune or --list", file=sys.stderr)
+        print("sync: --verify, --rollback-on-drift and --require-complete apply to a write run, not --check, --diff, --prune or --list", file=sys.stderr)
         return 2
     if state.verify and args.only:
-        print("sync: --verify and --rollback-on-drift check the whole deployment, so they cannot be combined with --only", file=sys.stderr)
+        print("sync: --verify, --rollback-on-drift and --require-complete check the whole deployment, so they cannot be combined with --only", file=sys.stderr)
         return 2
 
     try:
@@ -1301,6 +1513,12 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
     from stratarc.staging import build_stage, cleanup_all
 
     cp = ControlPlane.load(control_plane_file(root))
+    if diff and reconciled == 1:
+        # A stale control plane is what a sync reconciles before it writes,
+        # so the preview renders against the reconciled one, kept in memory;
+        # otherwise it would omit the writes a new row (a fresh source
+        # root's instruction file, for one) is about to cause.
+        cp = _reconciled_preview(root) or cp
 
     # runtime:<name> rows in the global column gate which runtimes receive anything
     if cp.rows:
@@ -1335,7 +1553,15 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
     unsupported = False
     gated = False
     reverse_findings: dict[str, list[Finding]] | None = None
+    account = DeployAccount()
     try:
+        # Preflight: every gate that can fail without writing runs for every
+        # runtime first, so a predictable failure (an unmapped hook event, a
+        # missing adapter, a stale or unsupported deploy, a target that cannot
+        # be written) stops a write run before any runtime or project is
+        # touched. A read-only run reports the same failures and still
+        # compares the runtimes that passed.
+        ready: list[tuple[str, object, pathlib.Path]] = []
         for name, (mod, target) in live.items():
             gaps = unmapped_hook_events(stage, name)
             if gaps:
@@ -1344,6 +1570,7 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
                     file=sys.stderr,
                 )
                 _refused(read_only, "runtime", "hook-mappings", runtime=name)
+                account.add("runtime", name, "failed", "missing hook mappings", target)
                 unsupported = True
                 continue
             try:
@@ -1354,14 +1581,16 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
                     file=sys.stderr,
                 )
                 _refused(read_only, "runtime", "adapter-missing", runtime=name)
+                account.add("runtime", name, "failed", f"adapter missing ({e.name})", target)
                 unsupported = True
                 continue
-            from stratarc.deploy_guard import refusal as _deploy_refusal, stamp_name, write_stamp
+            from stratarc.deploy_guard import refusal as _deploy_refusal
 
             stale_bad = _deploy_refusal(target, canonical_version, root)
             if stale_bad is not None:
                 print(f"sync: {name}: {stale_bad}", file=sys.stderr)
                 _refused(read_only, "runtime", "stale-deploy", runtime=name)
+                account.add("runtime", name, "failed", "stale deploy", target)
                 unsupported = True
                 continue
             if not read_only:
@@ -1370,20 +1599,45 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
                     print(line, file=sys.stderr)
                 if not allowed:
                     _refused(read_only, "runtime", "adapter-unsupported", runtime=name)
+                    account.add("runtime", name, "failed", "adapter does not support the installed runtime", target)
                     gated = True
                     continue
-            from stratarc.adapters._components import RenderRefused, notes as component_notes
+                unwritable = _unwritable(target)
+                if unwritable is not None:
+                    print(f"sync: {name}: {short(unwritable)} is not writable", file=sys.stderr)
+                    _refused(read_only, "runtime", "target-unwritable", runtime=name)
+                    account.add("runtime", name, "failed", f"{short(unwritable)} is not writable", target)
+                    unsupported = True
+                    continue
+            ready.append((name, adapter, target))
 
+        if not read_only and (gated or unsupported):
+            for name, _adapter, target in ready:
+                account.add("runtime", name, "not-attempted", "another runtime failed preflight", target)
+            if not args.only:
+                account.add("projects", "delivery", "not-attempted", "a runtime failed preflight")
+            print("sync: preflight: refusing to deploy; nothing was written to any runtime or project", file=sys.stderr)
+            account.finish(stdout=True)
+            return 5 if gated and not unsupported else 2
+
+        from stratarc.adapters._components import RenderRefused, notes as component_notes
+        from stratarc.deploy_guard import stamp_name, write_stamp
+
+        for index, (name, adapter, target) in enumerate(ready):
             try:
                 if state.rollback and not read_only:
                     _back_up_planned(adapter, name, stage, target, root, state)
                 actions = adapter.sync(stage, target, dry_run=read_only)
-            except RenderRefused as refused:
-                # A runtime file the component renderer cannot rewrite
-                # safely: this runtime fails and stays unstamped, the
-                # others still sync.
-                print(f"sync: {name}: {refused}", file=sys.stderr)
+            except (RenderRefused, OSError) as refused:
+                # A failure only the write itself can find (a runtime file
+                # the component renderer cannot rewrite safely, a write the
+                # system refuses): this runtime fails and stays unstamped,
+                # the others still sync, and the account at the end names
+                # what changed before it.
+                reason = str(refused) if isinstance(refused, RenderRefused) else f"{type(refused).__name__}: {refused.strerror or refused}"
+                print(f"sync: {name}: {reason}", file=sys.stderr)
                 _refused(read_only, "runtime", "render-refused", runtime=name)
+                account.add("runtime", name, "failed", reason, target)
                 unsupported = True
                 continue
             # A selected component this runtime's adapter cannot render is
@@ -1391,12 +1645,16 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
             # --check stale.
             for line in component_notes(stage, name):
                 print(f"sync: {name}: {line}")
+            if not read_only:
+                _record_deployed(adapter, name, stage, target)
             if not actions:
                 print(f"sync: {name}: current")
+                account.add("runtime", name, "current", "", target)
                 if not read_only:
                     write_stamp(target, canonical_version, root)
                 continue
             stale_any = True
+            account.add("runtime", name, "changed", "", target)
             head = "would" if read_only else "did"
             if not read_only:
                 stamp_before = _digest(target / stamp_name(root))
@@ -1421,13 +1679,19 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
         # Computed from the same stage the forward pass just used, so a
         # control-plane-disabled item is never mistaken for an orphan.
         if args.check:
-            reverse_findings = reverse_pass(root, stage, live, home=home())
+            from stratarc import deploy_ledger
+
+            reverse_findings = reverse_pass(root, stage, live, home=home(), ledger=deploy_ledger.load())
     finally:
         cleanup_all()
 
     if gated:
         return 5
     if unsupported:
+        if not read_only:
+            if not args.only:
+                account.add("projects", "delivery", "not-attempted", "a runtime failed")
+            return _partial_failure(account, state, 2)
         return 2
 
     reverse_bad = False
@@ -1442,11 +1706,19 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
         delivered = run_projects(root, read_only)
         if delivered and not (diff and delivered == 1):
             _refused(read_only, "project", "delivery", file="projects-root")
+            if not read_only:
+                account.add("projects", "delivery", "failed", f"project delivery exited {delivered}")
+                return _partial_failure(account, state, delivered)
             return delivered
+        if not read_only:
+            account.add("projects", "delivery", "done", "")
 
     status, acts = run_permission_sweep(root, live, dry_run=read_only)
     if status:
         _refused(read_only, "project", "permissions", file="permissions.json")
+        if not read_only:
+            account.add("projects", "permissions", "failed", f"the permission sweep exited {status}")
+            return _partial_failure(account, state, status)
         return status
     if not acts:
         print("sync: permissions: current")
@@ -1458,6 +1730,9 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
             print(f"  {a}")
         if args.check:
             return 1
+    if not read_only:
+        account.add("projects", "permissions", "done", "")
+        account.finish()
     state.deployed = not read_only
     return 0
 

@@ -471,11 +471,20 @@ class GateDecision:
     message: str | None = None
 
 
-def sync_gate(adapter: AdapterStatus, warned: set[str] | None = None) -> GateDecision:
+def sync_gate(adapter: AdapterStatus, warned: set[str] | None = None, *, strict: bool = False) -> GateDecision:
     """Whether a deploy may go through this adapter.
 
-    `unsupported` blocks, every time. `outdated` is allowed and carries a warning the first time only; pass the same `warned` set for the whole run. `ok` and `unknown` are allowed without a message.
+    `unsupported` blocks, every time. `outdated` is allowed and carries a warning the first time only; pass the same `warned` set for the whole run. `unknown` (the installed version could not be detected) is allowed with a warning the first time when the adapter declares a supported range, since the range was not checked, and blocks when `strict` is set; an adapter that supports `*` has nothing to check. `ok` is allowed without a message.
     """
+    if adapter.state == UNKNOWN and adapter.supports != "*":
+        detail = f'The adapter "{adapter.name}" declares {adapter.supports}, but {adapter.detail[:-1].lower() if adapter.detail.endswith(".") else adapter.detail}, so the range was not checked.'
+        if strict:
+            return GateDecision(False, adapter.state, detail)
+        seen = warned if warned is not None else set()
+        if adapter.name in seen:
+            return GateDecision(True, adapter.state, None)
+        seen.add(adapter.name)
+        return GateDecision(True, adapter.state, detail)
     if adapter.state == UNSUPPORTED:
         return GateDecision(False, adapter.state, f'The adapter "{adapter.name}" does not support this install: {adapter.detail} Update it with `stratarc adapter register`, or pin the runtime to a supported version.')
     if adapter.state == OUTDATED:

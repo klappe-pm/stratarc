@@ -24,12 +24,16 @@ pipx install git+https://github.com/klappe-pm/stratarc@<tag>
 
 Leave off the `@<tag>` to follow the default branch.
 
+## Which Version These Docs Describe
+
+PyPI carries the newest published release, and each tagged release on GitHub has a matching entry in [CHANGELOG.md](../../CHANGELOG.md). These docs, on the default branch, describe the code on the default branch, which can be ahead of PyPI: its changes are listed under Unreleased in the changelog, and `stratarc --version` reports the version it is being prepared as. To run exactly what the docs describe, install from the repository without a tag. Where a released version behaves differently, the page says so; the main difference today is the source root layout `stratarc init` writes, described in [Configuration](../reference/configuration.md).
+
 ## Install for Development
 
 Contributors install an editable copy with the test dependencies. See [First Contribution](../tutorials/first-contribution.md) for the full setup.
 
 ```bash
-cd stratarc && pip install -e '.[test]'
+cd ~/stratarc && python3 -m venv .venv && .venv/bin/pip install -e '.[test]'
 ```
 
 ## Check the Install

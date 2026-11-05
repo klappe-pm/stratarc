@@ -20,7 +20,7 @@ This page describes how the `stratarc` command behaves as a whole: how it finds 
 | `prune` | deletes files a runtime holds that the source no longer produces |
 | `reconcile` | refreshes `control-plane.md` from the source tree |
 | `validate` | checks a source root against the schemas and the engine's rules |
-| `projects` | delivers `projects-root/` into the managed project checkouts |
+| `projects` | delivers the project configuration directory (`layout.project_config_dir`) into the managed project checkouts |
 | `gen-rules-digest` | renders or checks the rules digest in instruction files |
 | `components` | validates `components.json` and lists what it declares |
 | `drift` | reports where checkouts differ from what the control plane delivers, writes nothing to them and exits 6 on drift |

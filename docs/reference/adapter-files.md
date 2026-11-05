@@ -39,7 +39,7 @@ Helpers in `stratarc.adapters._common` copy a file while keeping the executable 
 def owned_outputs(source: Path, target: Path) -> list[OwnedDir]:
 ```
 
-Returns the target directories the adapter owns and the names it puts in them, computed the same way `sync` computes them. `OwnedDir(kind, path, names)` takes a label such as `"command"`, the absolute directory and the set of file names (or, for per-item directories such as skills, directory names). `check` reports anything else in an owned directory as an orphan, and `prune` deletes it. A function that returns `[]` owns nothing, and `check` then reports nothing about the runtime's directories.
+Returns the target directories the adapter owns and the names it puts in them, computed the same way `sync` computes them. `OwnedDir(kind, path, names)` takes a label such as `"command"`, the absolute directory and the set of file names (or, for per-item directories such as skills, directory names). `check` reports anything else in an owned directory as an orphan when the deploy ledger records that an earlier write run put it there, and `prune` deletes it; anything else there is unmanaged, reported and left in place. Every write run records the names this function returns that exist on disk. A function that returns `[]` owns nothing, and `check` then reports nothing about the runtime's directories.
 
 ## Optional: External_inventory
 

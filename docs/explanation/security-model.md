@@ -28,7 +28,7 @@ Each runtime directory carries a stamp recording the policy version, source chec
 
 ## Public Repositories
 
-A repository listed in `projects-root/public-targets.json` receives nothing: no delivered file, no control-plane column and no permission rewrite. A list that exists but cannot be read stops the run instead of being treated as empty, because reading it as empty would treat the one checkout the file protects as an ordinary project.
+A repository listed in `public-targets.json` in the project configuration directory (`projects/roots/` in a new source root, `projects-root/` in a 0.3 one) receives nothing: no delivered file, no control-plane column and no permission rewrite. A list that exists but cannot be read stops the run instead of being treated as empty, because reading it as empty would treat the one checkout the file protects as an ordinary project.
 
 ## What Stratarc Does Not Cover
 

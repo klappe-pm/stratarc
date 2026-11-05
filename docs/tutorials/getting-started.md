@@ -40,7 +40,9 @@ Pick a directory that does not exist yet, or is empty:
 stratarc init ~/stratarc-source
 ```
 
-`init` writes the bundled template: `AGENTS.md`, `stratarc.toml`, `permissions.json`, `components.json`, `control-plane.md`, and the `rules/`, `hooks/`, `skills/`, `commands/`, `agents/` and `projects-root/` directories, each with a short README that says what belongs in it. It refuses to write into a directory that already holds files. This directory is your source of truth. Put it in git.
+`init` writes the bundled template: `AGENTS.md`, `stratarc.toml`, `permissions.json` and `components.json`; the `rules/`, `hooks/`, `skills/`, `commands/` and `agents/` directories, each with a short README that says what belongs in it; `projects/roots/`, which holds the control plane (`projects/roots/control-plane.md`) and one folder per project; `templates/project/`, the starting point for a new project; and `.github/workflows/drift.yml`, a workflow that reports drift. It refuses to write into a directory that already holds files. This directory is your source of truth. Put it in git.
+
+The `[layout]` table in `stratarc.toml` names where the project folders and the control plane live. A source root made by Stratarc 0.3 has no such table and keeps them at `projects-root/` and `control-plane.md` instead; see [Configuration](../reference/configuration.md).
 
 ## Choose Your Runtimes by Hand
 
@@ -80,7 +82,7 @@ Tell Stratarc a source file was added:
 cd ~/stratarc-source && stratarc reconcile
 ```
 
-`reconcile` adds a row for the rule to `control-plane.md`, the table that records which items reach which scope. See [Use the Control Plane](../how-to-guides/use-the-control-plane.md) for how to read it.
+`reconcile` adds a row for the rule to `projects/roots/control-plane.md`, the table that records which items reach which scope. See [Use the Control Plane](../how-to-guides/use-the-control-plane.md) for how to read it.
 
 ## Preview the Change
 
@@ -88,7 +90,7 @@ cd ~/stratarc-source && stratarc reconcile
 cd ~/stratarc-source && stratarc diff
 ```
 
-`diff` shows what a deployment would change in every enabled runtime and writes nothing. `stratarc check` runs the same comparison and exits 6 when anything is out of date, which is what a script wants.
+`diff` shows what a deployment would change in every enabled runtime and writes nothing. It runs `validate` first and refuses a source root with an error in it. `stratarc check` runs the same comparison and exits 6 when anything is out of date, which is what a script wants.
 
 ## Deploy
 
@@ -96,7 +98,15 @@ cd ~/stratarc-source && stratarc diff
 cd ~/stratarc-source && stratarc sync
 ```
 
-`sync` renders the source into each enabled runtime. It writes only the files it owns and leaves everything else in a runtime directory alone. Open the runtime's instruction file, for example `~/.claude/AGENTS.md`, and the rule is in the rules digest.
+`sync` renders the source into each enabled runtime. It writes only the files it owns and leaves everything else in a runtime directory alone. Open the runtime's instruction file, for example `~/.claude/CLAUDE.md`, and the rule is in the rules digest.
+
+## Confirm and Recover
+
+```bash
+cd ~/stratarc-source && stratarc check
+```
+
+`check` now exits 0: everything deployed matches the source. To confirm a deploy as part of the write, and put the runtime files back if they do not match, use `stratarc sync --verify --rollback-on-drift`; [Roll Back a Deploy](../how-to-guides/roll-back-a-deploy.md) explains what that covers and how to restore a file by hand.
 
 ## Next Steps
 

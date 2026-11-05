@@ -14,7 +14,20 @@
 // is skipped, so a missing optional hook never blocks a tool call.
 
 const home = process.env.HOME ?? ""
-const hookRoot = `${home}/.config/opencode/hooks`
+
+// The registry belongs to the installation this plugin was loaded from. An
+// installed bridge lives at <target>/plugins/, so its registry is
+// <target>/hooks/hooks.json, whatever target stratarc was configured with and
+// whatever HOME says. A copy loaded from anywhere else (the packaged source,
+// for one) falls back to the default target under HOME.
+function resolveHookRoot(): string {
+  const dir = ((import.meta as { dir?: string }).dir ?? "").replace(/\/+$/, "")
+  const slash = dir.lastIndexOf("/")
+  if (slash >= 0 && dir.slice(slash + 1) === "plugins") return `${dir.slice(0, slash)}/hooks`
+  return `${home}/.config/opencode/hooks`
+}
+
+const hookRoot = resolveHookRoot()
 
 type Args = Record<string, unknown>
 type Hook = { command?: string }
@@ -37,15 +50,23 @@ const TOOL_NAMES: Record<string, string> = {
   todowrite: "TodoWrite",
 }
 
+// A missing or unreadable registry is reported, so it is never mistaken for
+// an installation that registers no hooks on purpose (an empty object).
 async function loadRegistry(): Promise<Registry> {
-  const file = Bun.file(`${hookRoot}/hooks.json`)
-  if (!(await file.exists())) return {}
-  try {
-    const parsed = JSON.parse(await file.text())
-    return parsed && typeof parsed === "object" ? (parsed as Registry) : {}
-  } catch {
+  const path = `${hookRoot}/hooks.json`
+  const file = Bun.file(path)
+  if (!(await file.exists())) {
+    console.error(`stratarc hooks: no hook registry at ${path}; no hooks will run`)
     return {}
   }
+  try {
+    const parsed = JSON.parse(await file.text())
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Registry
+    console.error(`stratarc hooks: the hook registry at ${path} is not a JSON object; no hooks will run`)
+  } catch {
+    console.error(`stratarc hooks: the hook registry at ${path} is not valid JSON; no hooks will run`)
+  }
+  return {}
 }
 
 function matcherAccepts(matcher: string | undefined, tool: string | undefined): boolean {
@@ -115,21 +136,80 @@ async function dispatch(registry: Registry, event: string, input: string, cwd: s
   for (const command of commandsFor(registry, event, tool)) await run(command, input, cwd)
 }
 
-function editedInput(tool: string, args: Args): Args | undefined {
-  const filePath = value(args, "filePath", "file_path")
-  if (tool === "write") return { file_path: filePath, content: value(args, "content") }
-  if (tool === "edit") return { file_path: filePath, old_string: value(args, "oldString", "old_string"), new_string: value(args, "newString", "new_string") }
-  if (tool !== "apply_patch") return undefined
-  const patch = value(args, "patchText", "patch_text")
-  const files = [...patch.matchAll(/^\*\*\* (?:Add|Update) File: (.+)$/gm)].map((match) => match[1])
-  const additions = patch.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).map((line) => line.slice(1)).join("\n")
-  return { file_path: files[0] ?? "", content: additions }
+// One file an apply_patch touches: the operation, the path it names, the
+// destination of a move, and the lines the patch adds to it.
+type PatchFile = { operation: "add" | "update" | "delete"; path: string; move_to?: string; content: string }
+
+// Reads every file header of an apply_patch body (*** Add File, *** Update
+// File with an optional *** Move to, *** Delete File). A patch that names no
+// file, or carries a header this bridge does not know, is malformed: it
+// returns an error rather than a reduced reading, so a hook never judges part
+// of an operation as if it were all of it.
+function parsePatch(patch: string): { files: PatchFile[] } | { error: string } {
+  const files: PatchFile[] = []
+  let current: PatchFile | undefined
+  for (const line of patch.split("\n")) {
+    const header = /^\*\*\* (Add File|Update File|Delete File|Move to): (.+)$/.exec(line)
+    if (header) {
+      const [, kind, path] = header
+      if (kind === "Move to") {
+        if (!current || current.operation !== "update") return { error: `"*** Move to: ${path}" does not follow an Update File header` }
+        current.move_to = path
+        continue
+      }
+      current = { operation: kind === "Add File" ? "add" : kind === "Update File" ? "update" : "delete", path, content: "" }
+      files.push(current)
+      continue
+    }
+    if (/^\*\*\* (Begin Patch|End Patch|End of File)\s*$/.test(line)) continue
+    if (line.startsWith("*** ")) return { error: `unrecognized patch header "${line}"` }
+    if (current && line.startsWith("+") && !line.startsWith("+++")) current.content += (current.content ? "\n" : "") + line.slice(1)
+  }
+  if (files.length === 0) return { error: "the patch names no file" }
+  return { files }
 }
 
-function toolPayload(event: string, sessionID: string, cwd: string, tool: string, args: Args, callID?: string): { name: string; body: string } {
-  const edit = editedInput(tool, args)
+// The tool_input payloads one tool call is checked with. Write and Edit are
+// one payload in Claude Code's shape. apply_patch is one payload per affected
+// path, a move's destination included, so a hook that reads file_path sees
+// every file; each payload also carries the whole patch (files, patch_text)
+// for a hook that wants the operation entire. A patch that cannot be read
+// blocks before the tool runs (strict); after it ran, the hooks get the raw
+// patch and the reason it could not be read, since there is nothing to block.
+function editedInputs(tool: string, args: Args, strict: boolean): Args[] | undefined {
+  const filePath = value(args, "filePath", "file_path")
+  if (tool === "write") return [{ file_path: filePath, content: value(args, "content") }]
+  if (tool === "edit") return [{ file_path: filePath, old_string: value(args, "oldString", "old_string"), new_string: value(args, "newString", "new_string") }]
+  if (tool !== "apply_patch") return undefined
+  const patch = value(args, "patchText", "patch_text")
+  const parsed = parsePatch(patch)
+  if ("error" in parsed) {
+    if (strict) throw new Error(`stratarc hooks: cannot check apply_patch: ${parsed.error}`)
+    return [{ file_path: "", content: "", files: [], patch_text: patch, parse_error: parsed.error }]
+  }
+  const inputs: Args[] = []
+  for (const file of parsed.files) {
+    const base = { operation: file.operation, content: file.content, files: parsed.files, patch_text: patch }
+    inputs.push({ file_path: file.path, ...base })
+    if (file.move_to) inputs.push({ file_path: file.move_to, move_from: file.path, ...base })
+  }
+  return inputs
+}
+
+function toolPayloads(event: string, sessionID: string, cwd: string, tool: string, args: Args, callID?: string): { name: string; bodies: string[] } {
   const name = TOOL_NAMES[tool] ?? tool
-  return { name, body: payload(event, sessionID, cwd, name, edit ?? args, callID) }
+  const inputs = editedInputs(tool, args, event === "PreToolUse") ?? [args]
+  return { name, bodies: inputs.map((input) => payload(event, sessionID, cwd, name, input, callID)) }
+}
+
+// Runs the hooks for one tool event, once per payload. A tool call no hook
+// matches is never parsed, so a patch this bridge cannot read blocks only
+// when a hook would have checked it.
+async function dispatchTool(registry: Registry, event: string, sessionID: string, cwd: string, tool: string, args: Args, callID?: string): Promise<void> {
+  const name = TOOL_NAMES[tool] ?? tool
+  if (commandsFor(registry, event, name).length === 0) return
+  const { bodies } = toolPayloads(event, sessionID, cwd, tool, args, callID)
+  for (const body of bodies) await dispatch(registry, event, body, cwd, name)
 }
 
 export const StratarcHooks = async ({ directory, worktree }: { directory: string; worktree?: string }) => {
@@ -159,13 +239,11 @@ export const StratarcHooks = async ({ directory, worktree }: { directory: string
     },
     "tool.execute.before": async (input: { tool: string; sessionID?: string; sessionId?: string; callID?: string }, output: { args: Args }) => {
       const id = input.sessionID || input.sessionId || ""
-      const { name, body } = toolPayload("PreToolUse", id, cwd, input.tool, output.args, input.callID)
-      await dispatch(registry, "PreToolUse", body, cwd, name)
+      await dispatchTool(registry, "PreToolUse", id, cwd, input.tool, output.args, input.callID)
     },
     "tool.execute.after": async (input: { tool: string; sessionID?: string; sessionId?: string; callID?: string; args: Args }) => {
       const id = input.sessionID || input.sessionId || ""
-      const { name, body } = toolPayload("PostToolUse", id, cwd, input.tool, input.args, input.callID)
-      await dispatch(registry, "PostToolUse", body, cwd, name)
+      await dispatchTool(registry, "PostToolUse", id, cwd, input.tool, input.args, input.callID)
     },
   }
 }

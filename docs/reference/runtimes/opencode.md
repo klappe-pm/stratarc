@@ -16,7 +16,7 @@ This page is the reference for what Stratarc writes into the OpenCode target, `~
 | `opencode.jsonc`, `mcp` | `components.json` MCP servers | the servers Stratarc owns |
 | `rules/` | the rules outside the `common` tier | kept for inspection; the digest in `AGENTS.md` carries the rest |
 | `hooks/` | `hooks/*.sh` | executable bits kept |
-| `hooks/hooks.json` | `hooks/hooks.json` | the registry the plugin reads, with script paths pointing into `~/.config/opencode/hooks` |
+| `hooks/hooks.json` | `hooks/hooks.json` | the registry the plugin reads (the one beside the `plugins/` directory the bridge was installed into), with script paths pointing into the target's `hooks/` directory: `$HOME/.config/opencode/hooks/` at the default target, the quoted absolute path at any other |
 | `plugins/stratarc-hooks.ts` | the packaged bridge | runs the registered commands on OpenCode's events |
 | `skill/` | `skills/` | the `SKILL.md` format is the same |
 | `commands/` | `commands/*.md` | `argument-hint` and `allowed-tools` are dropped |
@@ -25,5 +25,7 @@ This page is the reference for what Stratarc writes into the OpenCode target, `~
 ## The Hook Plugin
 
 `plugins/stratarc-hooks.ts` reads `hooks/hooks.json` and, for each OpenCode event, runs every command registered for the matching canonical event, with the payload on standard input in Claude Code's shape. OpenCode's lower-case tool names are mapped to the registry's (`bash` to `Bash`, `edit` and `write` to `Edit` and `Write`). A command that exits non-zero, or prints a JSON object with `hookSpecificOutput.permissionDecision` set to `deny`, blocks the tool call with the reason it gives. A command whose script was not deployed exits 127 and is skipped, so a missing optional hook never blocks a call. `session.created` runs `SessionStart`, and a child session is a subagent: it runs `SubagentStart` and `SubagentStop`.
+
+`apply_patch` is matched as `Write` and checked once per affected file, so a hook that reads `tool_input.file_path` sees every path the patch touches: each added, updated and deleted file, and a move's destination as its own payload carrying `move_from`. Each payload also carries `operation` (`add`, `update` or `delete`), the lines the patch adds to that file as `content`, every parsed file as `files`, and the original patch as `patch_text`. Any one denial blocks the whole call. A patch the plugin cannot read (no file header, or a header it does not know) blocks before the call when a hook is registered for it, rather than being checked in part; after the call, the hooks receive it raw with a `parse_error`. The check sees what the patch says it will do; it cannot see files a hook script or the patch tool touches by other means.
 
 The plugin runs inside OpenCode's own runtime and needs nothing extra installed. Other files in `plugins/` are yours and are never touched.

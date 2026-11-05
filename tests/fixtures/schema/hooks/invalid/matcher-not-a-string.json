@@ -1,0 +1,1 @@
+{"PreToolUse": [{"matcher": 3, "hooks": [{"type": "command", "command": "a.sh"}]}]}

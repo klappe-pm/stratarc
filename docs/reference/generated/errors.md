@@ -46,6 +46,8 @@ Every message the command line can print, generated from `stratarc/messages.py`.
 | [`msg-1143`](#msg-1143) | 2 invalid-input | The name cannot be used: {detail} |
 | [`msg-1145`](#msg-1145) | 2 invalid-input | The path cannot be used: {detail} |
 | [`msg-1154`](#msg-1154) | 4 conflict | The change conflicts with what already exists: {detail} |
+| [`msg-1155`](#msg-1155) | 5 unavailable | Verification did not cover every expected target: {detail} |
+| [`msg-1156`](#msg-1156) | 5 unavailable | The installed runtime version is not known: {detail} |
 
 ## Messages
 
@@ -392,3 +394,19 @@ Problem: The change conflicts with what already exists: {detail}
 Recovery: Resolve the conflict, or choose another name or path, then run the command again.
 
 Raised for the module code `conflict`.
+
+### `msg-1155`
+
+Ends the command with status 5 (unavailable).
+
+Problem: Verification did not cover every expected target: {detail}
+
+Recovery: Install or enable each target listed as skipped, or turn it off in stratarc.toml or control-plane.md, then run the command again; without --require-complete the same result exits 0.
+
+### `msg-1156`
+
+Ends the command with status 5 (unavailable).
+
+Problem: The installed runtime version is not known: {detail}
+
+Recovery: Make the runtime's command available on PATH so its version can be read, or run without --strict-versions to deploy with this warning.
