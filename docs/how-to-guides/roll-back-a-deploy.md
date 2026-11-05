@@ -10,6 +10,14 @@ cd ~/stratarc-source && stratarc sync --verify
 
 After writing, `--verify` renders again into a scratch area and compares it with the deployed files byte for byte. Drift means exactly what a dry run would change. It never writes a deployed file, and it exits 6 when it finds drift.
 
+The report lists every target it covers: the runtimes and projects it expected, the ones it compared, verified or found drifted, and the ones it skipped, each with a reason. A runtime `stratarc.toml` enables but that is not installed is expected and skipped; one that is turned off, or neither installed nor named, is excluded and listed with its reason. The result is `verified` only when every expected target was compared and matched, `incomplete` when an expected target was skipped, `no-targets` when nothing was compared and `drift` on any difference. The JSON report carries the same lists under `coverage` and a `complete` flag. Only drift changes the exit status, as before; to make automation require full coverage, add `--require-complete`, which exits 5 (message `msg-1155`) unless the result is `verified`:
+
+```bash
+cd ~/stratarc-source && stratarc sync --require-complete
+```
+
+A clean result is evidence of file consistency only: the same adapters render what is on disk. It does not show that a runtime loaded those files or enforces them; every report says so in its `evidence` field.
+
 ## Roll Back Automatically
 
 ```bash
@@ -18,7 +26,7 @@ cd ~/stratarc-source && stratarc sync --verify --rollback-on-drift
 
 Before it writes, the run backs up every file each adapter will change, and each runtime's deploy stamp. If verification finds drift, it puts the backups back, removes files the run created and exits 6. If a backup is missing it exits 5 and names the file, instead of reporting a restore it cannot perform.
 
-Rollback covers the runtime directories only. Project checkouts are verified but never rolled back, because they are working trees that may hold edits of yours. The two flags cannot be combined with `--only`, `--check`, `--diff`, `--dry-run`, `--prune` or `--list`.
+Rollback covers the runtime directories only. Project checkouts are verified but never rolled back, because they are working trees that may hold edits of yours. The three flags (`--verify`, `--rollback-on-drift`, `--require-complete`) cannot be combined with `--only`, `--check`, `--diff`, `--dry-run`, `--prune` or `--list`.
 
 ## Restore a File by Hand
 

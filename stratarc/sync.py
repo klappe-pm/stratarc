@@ -131,6 +131,7 @@ class DeployState:
 
     verify: bool = False
     rollback: bool = False
+    require_complete: bool = False
     cause_id: str = ""
     deployed: bool = False
     warned: set[str] = dataclasses.field(default_factory=set)
@@ -320,6 +321,14 @@ def _verify_deployment(root: pathlib.Path, state: DeployState) -> int:
         print("sync: verify: " + verify.format_report(report.to_dict()).replace("\n", "\nsync: verify: "))
     drifted = sum(report.counts[verify.DRIFTED] for report in reports)
     if not drifted:
+        if state.require_complete:
+            short_of = [report for report in reports if not report.complete]
+            if short_of:
+                missing = [item["target"] for report in short_of for item in report.coverage()["skipped"]]
+                detail = ", ".join(missing) if missing else "no target was compared"
+                error = CliError("msg-1155", param="coverage", detail=detail)
+                print(f"error {error.id}  {error.problem}\n  {error.recovery}", file=sys.stderr)
+                return UNAVAILABLE
         return 0
     drift = CliError("msg-1117", param="drift", detail=f"{drifted} file(s)")
     print(f"error {drift.id}  {drift.problem}\n  {drift.recovery}", file=sys.stderr)
@@ -1197,6 +1206,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--dry-run", action="store_true", help="with --prune, list what would be deleted; alone, the same as --diff")
     ap.add_argument("--verify", action="store_true", help="after the write, verify this run's change against what is deployed; exit 6 on drift")
     ap.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift, restore the runtime files from the home backups (implies --verify)")
+    ap.add_argument("--require-complete", action="store_true", help="exit 5 unless verification compared every expected runtime and project (implies --verify)")
     ap.add_argument(
         "--root",
         metavar="PATH",
@@ -1214,7 +1224,12 @@ def main(argv: list[str] | None = None) -> int:
 
 def run(args: argparse.Namespace, root: pathlib.Path) -> int:
     rollback = bool(getattr(args, "rollback_on_drift", False))
-    state = DeployState(verify=bool(getattr(args, "verify", False)) or rollback, rollback=rollback)
+    require_complete = bool(getattr(args, "require_complete", False))
+    state = DeployState(
+        verify=bool(getattr(args, "verify", False)) or rollback or require_complete,
+        rollback=rollback,
+        require_complete=require_complete,
+    )
     code = _run(args, root, state)
     if code == 0 and state.verify and state.deployed:
         return _verify_deployment(root, state)
@@ -1235,10 +1250,10 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
     # what would change and exits 0. Neither writes anything.
     read_only = args.check or diff
     if state.verify and (read_only or args.prune or args.list):
-        print("sync: --verify and --rollback-on-drift apply to a write run, not --check, --diff, --prune or --list", file=sys.stderr)
+        print("sync: --verify, --rollback-on-drift and --require-complete apply to a write run, not --check, --diff, --prune or --list", file=sys.stderr)
         return 2
     if state.verify and args.only:
-        print("sync: --verify and --rollback-on-drift check the whole deployment, so they cannot be combined with --only", file=sys.stderr)
+        print("sync: --verify, --rollback-on-drift and --require-complete check the whole deployment, so they cannot be combined with --only", file=sys.stderr)
         return 2
 
     try:

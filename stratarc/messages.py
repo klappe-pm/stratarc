@@ -255,6 +255,12 @@ _MESSAGES = (
         "The change conflicts with what already exists: {detail}",
         "Resolve the conflict, or choose another name or path, then run the command again.",
     ),
+    Message(
+        "msg-1155",
+        UNAVAILABLE,
+        "Verification did not cover every expected target: {detail}",
+        "Install or enable each target listed as skipped, or turn it off in stratarc.toml or control-plane.md, then run the command again; without --require-complete the same result exits 0.",
+    ),
 )
 
 CATALOG: dict[str, Message] = {message.id: message for message in _MESSAGES}

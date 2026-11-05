@@ -342,3 +342,77 @@ def test_format_report_lists_drift_only_unless_verbose(deployed) -> None:
     assert "drift" in brief and "AGENTS.md" in brief
     assert brief.count("\n") < verify.format_report(data, verbose=True).count("\n")
     json.dumps(data)
+
+
+# ----- target coverage (#18) -----
+
+
+def coverage_of(report: verify.Report) -> dict:
+    return report.to_dict()["coverage"]
+
+
+def test_a_complete_verification_lists_every_target_and_its_evidence(deployed) -> None:
+    root, _ = deployed
+    report = verify.run("all", root=root)
+    body = report.to_dict()
+    assert body["result"] == "verified" and body["complete"] is True
+    assert "runtime:claude" in body["coverage"]["expected"]
+    assert "runtime:claude" in body["coverage"]["verified"]
+    assert body["coverage"]["skipped"] == []
+    # Runtimes neither installed nor named in stratarc.toml are listed with a reason, not expected.
+    assert {item["target"] for item in body["coverage"]["excluded"]} >= {"runtime:codex", "runtime:gemini"}
+    assert "does not show that a runtime loaded the files" in body["evidence"]
+
+
+def test_no_target_is_distinct_from_success_and_keeps_exit_zero(tmp_path: Path, isolated: Path) -> None:
+    root = tmp_path / "source"
+    shutil.copytree(FIXTURE, root)
+    report = verify.run("all", root=root)
+    assert report.exit_code == 0
+    assert report.result == "no-targets" and not report.complete
+    assert coverage_of(report)["attempted"] == []
+    # claude is enabled in stratarc.toml but not installed, so it is expected and skipped.
+    assert coverage_of(report)["skipped"] == [{"target": "runtime:claude", "reason": f"enabled in stratarc.toml, but its target {isolated / '.claude'} does not exist"}]
+    printed = verify.format_report(report.to_dict())
+    assert "result: no-targets" in printed and "no target was compared" in printed
+
+
+def test_an_enabled_runtime_that_is_missing_makes_the_result_incomplete(deployed) -> None:
+    root, _ = deployed
+    (root / "stratarc.toml").write_text((root / "stratarc.toml").read_text() + '\n[runtimes.codex]\nenabled = true\n')
+    report = verify.run("all", root=root)
+    assert report.exit_code == 0
+    assert report.result == "incomplete"
+    assert [item["target"] for item in coverage_of(report)["skipped"]] == ["runtime:codex"]
+    assert "skipped  runtime:codex" in verify.format_report(report.to_dict())
+
+
+def test_a_disabled_runtime_is_excluded_not_skipped(deployed) -> None:
+    root, _ = deployed
+    (root / "stratarc.toml").write_text((root / "stratarc.toml").read_text() + '\n[runtimes.codex]\nenabled = false\n')
+    report = verify.run("all", root=root)
+    assert report.result == "verified"
+    assert {"target": "runtime:codex", "reason": "enabled = false in stratarc.toml"} in coverage_of(report)["excluded"]
+
+
+def test_a_skipped_project_leaves_the_result_incomplete(deployed, monkeypatch: pytest.MonkeyPatch) -> None:
+    root, _ = deployed
+    monkeypatch.setattr(projects, "sync_project", lambda name, dry, cp=None: ["skip notes-cli: no checkout"])
+    monkeypatch.setattr(verify, "_project_names", lambda r, cp: ["notes-cli"])
+    report = verify.run("project:notes-cli", root=root)
+    assert report.result == "no-targets"
+    assert coverage_of(report)["skipped"] == [{"target": "project:notes-cli", "reason": "skip notes-cli: no checkout"}]
+
+
+def test_sync_require_complete_exits_five_when_an_expected_runtime_is_missing(deployed) -> None:
+    root, _ = deployed
+    (root / "stratarc.toml").write_text((root / "stratarc.toml").read_text() + '\n[runtimes.codex]\nenabled = true\n')
+    runs = {}
+    for flags in (["--verify"], ["--require-complete"]):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            runs[flags[0]] = (sync.main(["--root", str(root), *flags]), err.getvalue())
+    assert runs["--verify"][0] == 0, runs["--verify"][1]
+    code, err = runs["--require-complete"]
+    assert code == 5, err
+    assert "msg-1155" in err and "runtime:codex" in err
