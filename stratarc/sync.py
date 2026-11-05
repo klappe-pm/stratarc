@@ -132,6 +132,7 @@ class DeployState:
     verify: bool = False
     rollback: bool = False
     require_complete: bool = False
+    strict_versions: bool = False
     cause_id: str = ""
     deployed: bool = False
     warned: set[str] = dataclasses.field(default_factory=set)
@@ -218,11 +219,14 @@ def _adapter_gate(runtime: str, state: DeployState) -> tuple[bool, list[str]]:
     allowed, shown = True, []
     for manifest in manifests:
         status = registry.evaluate(manifest, installed)
-        decision = registry.sync_gate(status, state.warned)
+        decision = registry.sync_gate(status, state.warned, strict=state.strict_versions)
         allowed = allowed and decision.allowed
         if decision.message:
-            blocked = decision.state == registry.UNSUPPORTED
-            message = CliError("msg-1114" if blocked else "msg-1115", param="adapter", detail=f'The adapter "{status.name}": {status.detail}')
+            blocked = not decision.allowed
+            if decision.state == registry.UNKNOWN:
+                message = CliError("msg-1156", param="adapter", detail=decision.message)
+            else:
+                message = CliError("msg-1114" if blocked else "msg-1115", param="adapter", detail=f'The adapter "{status.name}": {status.detail}')
             shown.append(f"{'error' if blocked else 'warning'} {message.id}  {message.problem}\n  {message.recovery}")
     return allowed, shown
 
@@ -1317,6 +1321,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--verify", action="store_true", help="after the write, verify this run's change against what is deployed; exit 6 on drift")
     ap.add_argument("--rollback-on-drift", action="store_true", help="when verification finds drift or a runtime write fails, restore the runtime files from the home backups (implies --verify)")
     ap.add_argument("--require-complete", action="store_true", help="exit 5 unless verification compared every expected runtime and project (implies --verify)")
+    ap.add_argument("--strict-versions", action="store_true", help="refuse a runtime whose installed version cannot be detected when its adapter declares a supported range")
     ap.add_argument(
         "--root",
         metavar="PATH",
@@ -1339,6 +1344,7 @@ def run(args: argparse.Namespace, root: pathlib.Path) -> int:
         verify=bool(getattr(args, "verify", False)) or rollback or require_complete,
         rollback=rollback,
         require_complete=require_complete,
+        strict_versions=bool(getattr(args, "strict_versions", False)),
     )
     code = _run(args, root, state)
     if code == 0 and state.verify and state.deployed:

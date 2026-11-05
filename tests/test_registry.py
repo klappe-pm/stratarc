@@ -208,10 +208,25 @@ def test_gate_warns_once_per_run_for_outdated() -> None:
     assert registry.sync_gate(status, set()).message  # a new run warns again
 
 
-def test_gate_is_silent_for_ok_and_unknown() -> None:
-    for installed in ("0.6", None):
-        decision = registry.sync_gate(registry.evaluate(good(), installed))
-        assert decision.allowed and decision.message is None
+def test_gate_is_silent_for_ok() -> None:
+    decision = registry.sync_gate(registry.evaluate(good(), "0.6"))
+    assert decision.allowed and decision.message is None
+
+
+def test_gate_warns_once_for_an_unknown_version_against_a_declared_range_and_strict_blocks() -> None:
+    status = registry.evaluate(good(), None)
+    assert status.state == registry.UNKNOWN and status.supports != "*"
+    warned: set[str] = set()
+    first = registry.sync_gate(status, warned)
+    assert first.allowed and "the range was not checked" in first.message
+    assert registry.sync_gate(status, warned).message is None
+    strict = registry.sync_gate(status, set(), strict=True)
+    assert not strict.allowed and "the range was not checked" in strict.message
+
+
+def test_gate_is_silent_for_an_unknown_version_when_any_version_is_supported() -> None:
+    decision = registry.sync_gate(registry.evaluate({**good(), "supports": "*"}, None), strict=True)
+    assert decision.allowed and decision.message is None
 
 
 # deprecation

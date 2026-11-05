@@ -10,7 +10,7 @@ from stratarc import messages
 
 DENIED = {"msg-1003", "msg-1118"}
 CONFLICT = {"msg-1005", "msg-1126", "msg-1154"}
-UNAVAILABLE = {"msg-1007", "msg-1112", "msg-1114", "msg-1115", "msg-1116", "msg-1119", "msg-1138", "msg-1155"}
+UNAVAILABLE = {"msg-1007", "msg-1112", "msg-1114", "msg-1115", "msg-1116", "msg-1119", "msg-1138", "msg-1155", "msg-1156"}
 DRIFT = {"msg-1117"}
 FAILURE = {"msg-1008"}
 
@@ -54,6 +54,7 @@ EXPECTED_IDS = {
     "msg-1145",
     "msg-1154",
     "msg-1155",
+    "msg-1156",
 }
 
 # Codes a module raises that the catalog deliberately does not map. None today: a code a module raises is shown as a catalog message.

@@ -261,6 +261,12 @@ _MESSAGES = (
         "Verification did not cover every expected target: {detail}",
         "Install or enable each target listed as skipped, or turn it off in stratarc.toml or control-plane.md, then run the command again; without --require-complete the same result exits 0.",
     ),
+    Message(
+        "msg-1156",
+        UNAVAILABLE,
+        "The installed runtime version is not known: {detail}",
+        "Make the runtime's command available on PATH so its version can be read, or run without --strict-versions to deploy with this warning.",
+    ),
 )
 
 CATALOG: dict[str, Message] = {message.id: message for message in _MESSAGES}

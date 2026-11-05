@@ -113,7 +113,7 @@ stratarc doctor [--permissions] [--clean] [--yes] [--report]
 render the source into every enabled runtime and managed project.
 
 ```text
-stratarc sync [--verify] [--rollback-on-drift] [--require-complete] [--only RUNTIME] [--dry-run] [--list]
+stratarc sync [--verify] [--rollback-on-drift] [--require-complete] [--strict-versions] [--only RUNTIME] [--dry-run] [--list]
 ```
 
 | option | meaning |
@@ -121,6 +121,7 @@ stratarc sync [--verify] [--rollback-on-drift] [--require-complete] [--only RUNT
 | `--verify` | After the write, verify the change against what is deployed; exit 6 on drift. |
 | `--rollback-on-drift` | When verification finds drift or a runtime write fails, restore the runtime files from the home backups (implies --verify). |
 | `--require-complete` | Exit 5 unless verification compared every expected runtime and project (implies --verify). |
+| `--strict-versions` | Refuse a runtime whose installed version cannot be detected when its adapter declares a supported range. |
 | `--only` `RUNTIME` | Sync one runtime and skip project delivery. |
 | `--dry-run` | Print what a sync would change and write nothing. |
 | `--list` | List the runtimes and whether each target exists. |

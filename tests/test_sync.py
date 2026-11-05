@@ -1850,6 +1850,39 @@ class TestAdapterGate:
         assert messages_recovery("msg-1114") in err
         assert calls == []
 
+    def test_an_undetected_version_warns_once_and_deploys(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        """#19: an adapter that declares a range cannot check it against an unknown version, and says so."""
+        from stratarc import registry
+
+        root, calls, configure = world
+        configure(supports=">=1")
+        monkeypatch.setattr(registry, "detect_versions", lambda: {"fixture": None})
+        code, _out, err = run_main("--root", str(root))
+        assert code == 0, err
+        assert err.count("warning msg-1156") == 1
+        assert 'declares >=1, but the installed fixture version is not known, so the range was not checked' in err
+        assert calls == [False]
+
+    def test_strict_versions_refuses_an_undetected_version(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        from stratarc import registry
+
+        root, calls, configure = world
+        configure(supports=">=1")
+        monkeypatch.setattr(registry, "detect_versions", lambda: {"fixture": None})
+        code, _out, err = run_main("--root", str(root), "--strict-versions")
+        assert code == 5
+        assert "error msg-1156" in err
+        assert calls == []
+
+    def test_an_adapter_that_supports_any_version_has_nothing_to_warn_about(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        from stratarc import registry
+
+        root, calls, configure = world
+        configure()
+        monkeypatch.setattr(registry, "detect_versions", lambda: {"fixture": None})
+        code, _out, err = run_main("--root", str(root), "--strict-versions")
+        assert code == 0 and "msg-1156" not in err
+
     def test_a_read_only_run_is_not_gated(self, world) -> None:
         root, calls, configure = world
         configure(supports=">=3")

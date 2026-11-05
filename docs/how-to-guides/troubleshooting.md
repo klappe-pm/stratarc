@@ -66,7 +66,7 @@ Another checkout deployed a higher `policyVersion` to the same runtime directory
 
 ## An Adapter Does Not Support the Installed Runtime
 
-`msg-1114` (exit 5) means the runtime version is outside the range the adapter supports, so the deploy stops before writing. `msg-1115` is a warning that the runtime is newer than the version the adapter was tested against, and the deploy continues. `stratarc adapter status` compares every adapter with its installed runtime.
+`msg-1114` (exit 5) means the runtime version is outside the range the adapter supports, so the deploy stops before writing. `msg-1115` is a warning that the runtime is newer than the version the adapter was tested against, and the deploy continues. `msg-1156` is a warning that the runtime's version could not be detected (its command is not on `PATH`, or did not answer), so the adapter's declared range was not checked; the deploy continues, and `stratarc sync --strict-versions` refuses it with exit 5 instead. `stratarc adapter status` compares every adapter with its installed runtime.
 
 ## The Check Exits 6
 
