@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Which checkouts are public repositories, decided one way everywhere.
 
-``projects-root/public-targets.json`` names the repositories published from
+``public-targets.json`` in the source root's project configuration directory
+(``layout.project_config_dir``, ``projects-root`` by default) names the repositories published from
 this source tree. A public target receives nothing from the source root: no
 manifest row, column or snapshot, no delivered file and no permission sweep.
 Every one of those reads the list and judges a checkout through this module.
@@ -44,30 +45,76 @@ _GITHUB_ORIGINS = (
 
 
 class PublicTargetsUnreadable(Exception):
-    """projects-root/public-targets.json exists and cannot be trusted."""
+    """A public-targets.json exists and cannot be trusted."""
+
+
+FILE_NAME = "public-targets.json"
+_LAYOUT_KEY = re.compile(r'^\s*project_config_dir\s*=\s*"([^"]+)"\s*(?:#.*)?$', re.MULTILINE)
+
+
+def project_config_dir(root: Path) -> str:
+    """``layout.project_config_dir`` from ``<root>/stratarc.toml``, or ``projects-root``.
+
+    The engine's own reader is stratarc.config, which this file cannot import
+    when a deployed hook runs it under a bare python3; tomllib is used when
+    the interpreter has it, a narrow line match otherwise. A stratarc.toml
+    that exists and cannot be parsed raises PublicTargetsUnreadable, since
+    guessing the directory could miss the list.
+    """
+    config = Path(root) / "stratarc.toml"
+    if not config.is_file():
+        return RELATIVE_PATH.parent.as_posix()
+    try:
+        text = config.read_text(encoding="utf-8")
+    except (OSError, ValueError) as error:
+        raise PublicTargetsUnreadable(f"stratarc.toml cannot be read ({type(error).__name__}: {error})") from None
+    try:
+        import tomllib
+    except ImportError:  # Python before 3.11, as a deployed hook may run under
+        match = _LAYOUT_KEY.search(text)
+        return match.group(1) if match else RELATIVE_PATH.parent.as_posix()
+    try:
+        layout = tomllib.loads(text).get("layout", {})
+    except tomllib.TOMLDecodeError as error:
+        raise PublicTargetsUnreadable(f"stratarc.toml cannot be read ({error})") from None
+    value = layout.get("project_config_dir") if isinstance(layout, dict) else None
+    return value if isinstance(value, str) and value else RELATIVE_PATH.parent.as_posix()
+
+
+def target_files(root: Path) -> list[Path]:
+    """Every file the list is read from: the one in the configured project configuration directory, and the 0.3 location when that differs."""
+    configured = Path(project_config_dir(root)) / FILE_NAME
+    relatives = [configured] if configured == RELATIVE_PATH else [configured, RELATIVE_PATH]
+    return [Path(root) / relative for relative in relatives]
 
 
 def load_public_targets(root: Path) -> frozenset[str]:
-    """The entries of ``<root>/projects-root/public-targets.json``.
+    """The entries of ``public-targets.json`` in the source root's project configuration directory.
 
-    A missing file is an empty declaration. An unreadable or malformed one
-    raises PublicTargetsUnreadable naming the file, so the caller refuses
-    rather than reads it as empty.
+    The directory is ``layout.project_config_dir`` in ``stratarc.toml``
+    (``projects-root`` when unset). A list left at the 0.3 location,
+    ``projects-root/public-targets.json``, is read as well, since a list
+    that protects a checkout is never safe to skip. A missing file is an
+    empty declaration. An unreadable or malformed one raises
+    PublicTargetsUnreadable naming the file, so the caller refuses rather
+    than reads it as empty.
     """
-    path = Path(root) / RELATIVE_PATH
-    label = RELATIVE_PATH.as_posix()
-    if not path.is_file():
-        return frozenset()
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        raise PublicTargetsUnreadable(f"{label} cannot be read ({type(error).__name__}: {error})") from None
-    targets = document.get("targets") if isinstance(document, dict) else document
-    if not isinstance(targets, list) or not all(isinstance(entry, str) and entry.strip() for entry in targets):
-        raise PublicTargetsUnreadable(
-            f"{label} must hold a list of project directory names or owner/repo slugs, bare or under a targets key"
-        )
-    return frozenset(entry.strip() for entry in targets)
+    entries: set[str] = set()
+    for path in target_files(root):
+        label = path.relative_to(Path(root)).as_posix()
+        if not path.is_file():
+            continue
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise PublicTargetsUnreadable(f"{label} cannot be read ({type(error).__name__}: {error})") from None
+        targets = document.get("targets") if isinstance(document, dict) else document
+        if not isinstance(targets, list) or not all(isinstance(entry, str) and entry.strip() for entry in targets):
+            raise PublicTargetsUnreadable(
+                f"{label} must hold a list of project directory names or owner/repo slugs, bare or under a targets key"
+            )
+        entries.update(entry.strip() for entry in targets)
+    return frozenset(entries)
 
 
 def origin_slug(url: str | None) -> str | None:

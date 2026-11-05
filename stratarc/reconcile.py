@@ -106,7 +106,7 @@ def _is_canonical(path: pathlib.Path, canonical: pathlib.Path) -> bool:
 
 
 def public_targets() -> frozenset[str]:
-    """The entries of projects-root/public-targets.json: project names and owner/repo slugs.
+    """The entries of public-targets.json in the project configuration directory: project names and owner/repo slugs.
 
     A public target is a repository the source tree must not write into. Discovery never records it: no manifest row, no column, no snapshot, no note. A missing file declares nothing. One that exists and cannot be read raises ManifestUnreadable, for the same reason components.json does: reading it as empty would register a public checkout as an ordinary project and write a snapshot into it on the very run meant to keep that from happening. `stratarc.public_targets` is the one reader of the file.
     """

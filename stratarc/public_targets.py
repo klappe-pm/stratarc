@@ -33,6 +33,7 @@ def _load():
 _module = _load()
 
 RELATIVE_PATH = _module.RELATIVE_PATH
+target_files = _module.target_files
 PublicTargetsUnreadable = _module.PublicTargetsUnreadable
 load_public_targets = _module.load_public_targets
 origin_slug = _module.origin_slug
@@ -52,4 +53,5 @@ __all__ = [
     "load_public_targets",
     "origin_slug",
     "origin_url",
+    "target_files",
 ]

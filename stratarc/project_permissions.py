@@ -415,7 +415,7 @@ def sweep(
 
     Loads the canonical policy from source/permissions.json. root defaults to the projects directory (see projects_dir). Returns an empty list, touching nothing, when the policy is empty or root is not a directory. Each candidate file is passed to its runtime's handler, and a handler never raises: an unreadable or invalid file becomes a skip action and the sweep moves on to the next candidate.
 
-    A public target (source/projects-root/public-targets.json, read through stratarc.public_targets) is never rewritten on any surface: its permission files are its own, and the private policy must not land in a published tree. A list that exists and cannot be read raises RuntimeError before any file is touched, the refusal the project sync makes for the same file.
+    A public target (public-targets.json in the project configuration directory, read through stratarc.public_targets) is never rewritten on any surface: its permission files are its own, and the private policy must not land in a published tree. A list that exists and cannot be read raises RuntimeError before any file is touched, the refusal the project sync makes for the same file.
     """
     if root is None:
         root = projects_dir(source)

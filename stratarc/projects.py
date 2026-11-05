@@ -10,7 +10,7 @@ checkouts directly, or under status folders (active/, new/, inactive/,
 archived/, external/); a checkout under inactive/, archived/, or external/ is
 skipped, so shelving a project by moving its directory also stops config
 delivery to it. That is the intended policy.
-A project named in projects-root/public-targets.json is a public repository
+A project named in public-targets.json (in the project configuration directory) is a public repository
 and is skipped wherever it sits (public_targets). The projects root itself
 is stratarc.paths.projects_root(): $STRATARC_PROJECTS_DIR, then projects_root
 in stratarc.toml, then <home>/projects (see projects_dir).
@@ -153,7 +153,7 @@ def configure_root(root: pathlib.Path) -> None:
 
 
 def public_targets() -> frozenset[str]:
-    """The entries of projects-root/public-targets.json: project names and owner/repo slugs.
+    """The entries of public-targets.json in the project configuration directory: project names and owner/repo slugs.
 
     A public target is a repository extracted from this one (stratarc first).
     It must receive nothing from this private tree, so resolve() refuses it
@@ -1904,7 +1904,7 @@ def build_parser() -> argparse.ArgumentParser:
             "into that project's checkout under the projects root: its instruction files, rules,\n"
             "hooks, agents, commands, scripts and skills, in each runtime's project layout.\n"
             "Only active projects receive config; a checkout under inactive/, archived/ or\n"
-            "external/, or one named in projects-root/public-targets.json, is skipped.\n"
+            "external/, or one named in public-targets.json in the project configuration directory, is skipped.\n"
             "`stratarc sync` runs this for you; run it directly to deliver one project or to\n"
             "preview a delivery."
         ),
