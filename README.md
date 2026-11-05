@@ -30,13 +30,13 @@
 
 If you use more than one coding agent, you already know the problem. Claude Code wants a `CLAUDE.md` and a `settings.json`. Codex wants `AGENTS.md`. Gemini CLI, Cursor and OpenCode each want their own layout, their own hook format and their own idea of what a rule or a skill looks like. You end up with five copies of the same instructions, and they drift apart the moment you stop paying attention.
 
-Stratarc gives you one place to write it all down. You keep a single source tree of instructions, rules, hooks, skills, commands, agents and permissions. Stratarc compiles that tree into the native format of any runtime you enable and deploys it into the right directory. Edit once, sync, and every agent sees the same configuration.
+Stratarc gives you one place to write it all down. You keep a single source tree of instructions, rules, hooks, skills, commands, agents and permissions. Stratarc compiles that tree into the native format of any runtime you enable and deploys it into the right directory. Edit once, sync, and every agent receives as much of that configuration as its runtime can express. Where a runtime has no equivalent (Cursor takes no skills, commands or agents, for one), nothing is invented: the [runtimes reference](https://github.com/klappe-pm/stratarc/blob/main/docs/reference/runtimes/README.md) lists what each runtime receives and what it does not.
 
 ## Why Stratarc?
 
 | Without Stratarc | With Stratarc |
 | --- | --- |
-| Edit five config files, forget one, and the runtimes diverge | Edit one source, sync once, and every runtime stays in step |
+| Edit five config files, forget one, and the runtimes diverge | Edit one source, sync once, and every runtime gets the parts it supports |
 | Copy rules between runtimes and fix the formatting by hand | Write a rule once; each adapter renders the runtime's own format |
 | No record of what is deployed where | The control plane lists every item and the runtimes and projects it reaches |
 | Hand-merge project config into global settings | Project configuration is delivered from the same source tree |
@@ -136,7 +136,7 @@ On `sync`, Stratarc validates the tree, hands it to one adapter per enabled runt
 | Cursor | `~/.cursor` | rules, hooks, `hooks.json` |
 | OpenCode | `~/.config/opencode` | `AGENTS.md`, `opencode.jsonc`, rules, hooks, skills |
 
-The runtime directories are generated output. Change the source, run `sync`, and they are rebuilt.
+The runtime directories are generated output. Change the source, run `sync`, and they are rebuilt. `sync --verify` proves that what is on disk matches what the adapters render; it does not prove that a runtime loads and enforces them. Each adapter records the newest runtime version it was tested against, and `stratarc adapter status` compares that with the version you have installed.
 
 A complete worked example lives in [examples/notes-cli](https://github.com/klappe-pm/stratarc/tree/main/examples/notes-cli): a small source root beside the exact output each runtime receives from it.
 
@@ -144,17 +144,20 @@ A complete worked example lives in [examples/notes-cli](https://github.com/klapp
 
 | Command | What it does |
 | --- | --- |
+| `stratarc setup` | Walks through creating a source root, choosing runtimes and the first deploy. |
 | `stratarc init TARGET` | Scaffolds a new source root from the bundled template. |
 | `stratarc doctor` | Reports the health of the install without changing anything. |
-| `stratarc validate` | Checks the source root against the bundled schemas and engine rules. |
+| `stratarc validate` | Checks the source root's hook registry and component manifest against the bundled schema contracts, and the rest against the engine's rules. |
 | `stratarc diff` | Prints what a sync would change and writes nothing. |
-| `stratarc check` | Compares each runtime directory with the source and exits non-zero when anything is stale. |
+| `stratarc check` | Compares each runtime directory with the source and exits 6 when anything is stale. |
 | `stratarc sync` | Renders the source root into the enabled runtimes and managed projects. |
 | `stratarc prune` | Removes files a runtime holds that the source no longer produces. |
 | `stratarc reconcile` | Refreshes `control-plane.md`, the table that records which item reaches which scope. |
 | `stratarc projects` | Delivers each project's configuration from the project configuration directory (`projects/roots/` in a new source root) into its checkout. `sync` runs it for you. |
 | `stratarc gen-rules-digest` | Renders the rules digest, or embeds and checks it inside hand-authored instruction files. |
 | `stratarc components` | Validates `components.json` and, with `--list`, prints what it declares. |
+| `stratarc drift` | Reports where project checkouts differ from what the control plane delivers. |
+| `stratarc workflows` | Checks and shows the optional workflow module configuration. |
 | `stratarc adapter` | Lists the adapters, and writes the starting point for a runtime of your own. |
 
 Running `stratarc` with no arguments starts a guided setup the first time; after that it shows the status of the install and the commands to run next. `stratarc help COMMAND` shows one command's help, the same as `stratarc COMMAND --help`.
