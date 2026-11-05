@@ -33,7 +33,7 @@ PyPI carries the newest published release, and each tagged release on GitHub has
 Contributors install an editable copy with the test dependencies. See [First Contribution](../tutorials/first-contribution.md) for the full setup.
 
 ```bash
-cd stratarc && pip install -e '.[test]'
+cd ~/stratarc && python3 -m venv .venv && .venv/bin/pip install -e '.[test]'
 ```
 
 ## Check the Install
