@@ -7,10 +7,12 @@ This page describes the source root that `stratarc init` creates: each file and 
 | path | holds | read by |
 | --- | --- | --- |
 | `AGENTS.md` | the instructions every agent session starts from, with a marked block where the rules digest is written | every runtime |
-| `stratarc.toml` | the enabled runtimes, their targets and the projects root; see [Configuration](configuration.md) | Stratarc itself |
+| `stratarc.toml` | the enabled runtimes, their targets, the projects root and the layout of this source root; see [Configuration](configuration.md) | Stratarc itself |
 | `permissions.json` | the single permission policy, translated into each runtime's native allow, deny and ask lists | every runtime with a permission model |
 | `components.json` | external components: MCP servers, plugins, foreign hook groups, third-party skills and dependencies | every runtime that supports the component |
-| `control-plane.md` | generated tables of which item reaches which scope; see [Control Plane](control-plane.md) | Stratarc itself |
+| `projects/roots/control-plane.md` | generated tables of which item reaches which scope; see [Control Plane](control-plane.md) | Stratarc itself |
+| `projects/roots/public-targets.json` | optional: repositories that must receive nothing; see [Set Up a Project](../how-to-guides/set-up-a-project.md) | Stratarc itself |
+| `.github/workflows/drift.yml` | a GitHub Actions workflow that runs `stratarc drift --source` on the source root | GitHub Actions |
 
 ## Directories
 
@@ -21,9 +23,12 @@ This page describes the source root that `stratarc init` creates: each file and 
 | `skills/` | one directory per skill | a `SKILL.md` with `name` and `description` frontmatter |
 | `commands/` | one Markdown file per slash command | `description` frontmatter, optional `argument-hint` and `allowed-tools` |
 | `agents/` | one Markdown file per subagent | `name` and `description` frontmatter, optional `tools` and `model` |
-| `projects-root/` | one directory per project holding its project-local configuration | [Set Up a Project](../how-to-guides/set-up-a-project.md) |
+| `projects/roots/` | one directory per project holding its project-local configuration | [Set Up a Project](../how-to-guides/set-up-a-project.md) |
+| `templates/project/` | what `stratarc projects --new NAME` copies for a new project: `roots/` into the project configuration directory, `checkout/` into the checkout | [Set Up a Project](../how-to-guides/set-up-a-project.md) |
 | `adapters/` | one Python file per runtime of your own | [Adapter Files](adapter-files.md) |
 | `scripts/private/` | optional extra validator checks and project renderers | `validate_checks.py` declares `VALIDATE_CHECKS`; `project_renderers.py` declares `register` |
+
+The paths above are the layout `stratarc init` writes, named by the `[layout]` table in `stratarc.toml`. A source root made by Stratarc 0.3 has no `[layout]` table and keeps the control plane at `control-plane.md` and the project folders, `public-targets.json` included, in `projects-root/`; see [Configuration](configuration.md).
 
 Each directory the template creates holds a `README.md` describing the files that belong in it. A `README.md` is documentation and is never treated as a rule, command or agent.
 

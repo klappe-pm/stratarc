@@ -1,6 +1,6 @@
 # Control Plane
 
-The control plane is `control-plane.md` at the root of a source root. It is a Markdown file made of tables, written by `stratarc reconcile` and read by every adapter and every project delivery, that records which source item reaches which scope. This page describes its format. For using it, see [Use the Control Plane](../how-to-guides/use-the-control-plane.md).
+The control plane is the file `layout.control_plane` in `stratarc.toml` names: `projects/roots/control-plane.md` in a source root `stratarc init` writes, `control-plane.md` at the top of a 0.3 source root. It is a Markdown file made of tables, written by `stratarc reconcile` and read by every adapter and every project delivery, that records which source item reaches which scope. This page describes its format. For using it, see [Use the Control Plane](../how-to-guides/use-the-control-plane.md).
 
 ## Scopes
 
@@ -19,7 +19,7 @@ After the introduction, a `projects` table and a short `configuration` note, the
 | `commands` | `command:<name>` | file in `commands/` |
 | `agents` | `agent:<name>` | file in `agents/` |
 | `mcp-servers`, `plugins` | `mcp:<name>`, `plugin:<name>` | wanted MCP server or plugin in `components.json`; absent until one is declared |
-| `project-local-configuration` | `project:AGENTS.md`, `project:rules`, and so on | project-local item under `projects-root/` |
+| `project-local-configuration` | `project:AGENTS.md`, `project:rules`, and so on | project-local item under the project configuration directory (`layout.project_config_dir`) |
 | `runtimes` | `runtime:<name>` | adapter, shipped or in `adapters/` |
 
 ```markdown
@@ -58,7 +58,7 @@ An `x` in a cell opts the item in for that scope. Any other content, including a
 
 ## Per-Project Snapshots
 
-Each active project also gets `.docs/stratarc-control-plane.md`, a generated copy of its own column, so a session inside the project can read what it was given. Reconcile writes it only from the primary checkout of the source root, never from a linked worktree. The file is rewritten on every reconcile and is not meant to be edited.
+Each active project also gets `<local_dir>/stratarc-control-plane.md` (`local/` in a new source root, `.docs/` when `layout.local_dir` is unset), a generated copy of its own column, so a session inside the project can read what it was given. Reconcile writes it only from the primary checkout of the source root, never from a linked worktree. The file is rewritten on every reconcile and is not meant to be edited.
 
 ## Staleness
 

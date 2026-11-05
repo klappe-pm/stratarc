@@ -67,11 +67,13 @@ Stratarc needs Python 3.11 or newer. [pipx](https://pipx.pypa.io/) is the easies
 pipx install stratarc
 ```
 
-Or pin a tagged release straight from GitHub:
+Or pin a tagged release straight from GitHub, here 0.3.1, the newest release published to PyPI:
 
 ```bash
 pipx install git+https://github.com/klappe-pm/stratarc@v0.3.1
 ```
+
+The docs on the default branch describe the code there, which can be ahead of the newest release (see Unreleased in the [changelog](CHANGELOG.md)); install from `git+https://github.com/klappe-pm/stratarc` without a tag to match them exactly.
 
 Then check the install and see which runtimes Stratarc found on your machine:
 
@@ -118,8 +120,11 @@ stratarc-source/
 ├── agents/              subagent definitions
 ├── permissions.json     the single permission policy
 ├── components.json      MCP servers, plugins and other external components
-└── projects-root/       per-project configuration overrides
+├── projects/roots/      control-plane.md and per-project configuration overrides
+└── templates/project/   the starting point for a new project
 ```
+
+A source root made by Stratarc 0.3 keeps `control-plane.md` at the top and the project overrides in `projects-root/`; the `[layout]` table in `stratarc.toml` says which a root uses.
 
 On `sync`, Stratarc validates the tree, hands it to one adapter per enabled runtime, and each adapter renders the files that runtime expects into its target directory:
 
@@ -147,7 +152,7 @@ A complete worked example lives in [examples/notes-cli](https://github.com/klapp
 | `stratarc sync` | Renders the source root into the enabled runtimes and managed projects. |
 | `stratarc prune` | Removes files a runtime holds that the source no longer produces. |
 | `stratarc reconcile` | Refreshes `control-plane.md`, the table that records which item reaches which scope. |
-| `stratarc projects` | Delivers each project's configuration from `projects-root/` into its checkout. `sync` runs it for you. |
+| `stratarc projects` | Delivers each project's configuration from the project configuration directory (`projects/roots/` in a new source root) into its checkout. `sync` runs it for you. |
 | `stratarc gen-rules-digest` | Renders the rules digest, or embeds and checks it inside hand-authored instruction files. |
 | `stratarc components` | Validates `components.json` and, with `--list`, prints what it declares. |
 | `stratarc adapter` | Lists the adapters, and writes the starting point for a runtime of your own. |

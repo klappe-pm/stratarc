@@ -1,6 +1,6 @@
 # Use the Control Plane
 
-The control plane is `control-plane.md` in your source root. It is a set of tables that records, for every item you author, which scope it reaches: the user-level runtimes (the `global` column) and each project. This guide shows how to read it, how to change what reaches where, and how to keep it current. The file format is in [Control Plane](../reference/control-plane.md).
+The control plane is `control-plane.md` in your source root, at `projects/roots/control-plane.md` in one `stratarc init` writes (at the top in a 0.3 source root; `layout.control_plane` in `stratarc.toml` names it). It is a set of tables that records, for every item you author, which scope it reaches: the user-level runtimes (the `global` column) and each project. This guide shows how to read it, how to change what reaches where, and how to keep it current. The file format is in [Control Plane](../reference/control-plane.md).
 
 ## Read It
 
@@ -47,7 +47,7 @@ The `runtimes` table has a `runtime:<name>` row for each adapter, including ones
 
 ## Add a Project Column
 
-A project gets a column when it has a checkout under your projects root and is not listed in `public-targets.json`. See [Set Up a Project](set-up-a-project.md). Each active project also receives a generated copy of its own column as `.docs/stratarc-control-plane.md`, a record of what the project was given. Do not edit it.
+A project gets a column when it has a checkout under your projects root and is not listed in `public-targets.json`. See [Set Up a Project](set-up-a-project.md). Each active project also receives a generated copy of its own column as `local/stratarc-control-plane.md` (the folder `layout.local_dir` names, `.docs/` when unset), a record of what the project was given. Do not edit it.
 
 ## What Not to Do
 
