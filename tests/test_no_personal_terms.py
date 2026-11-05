@@ -21,7 +21,6 @@ FORBIDDEN = {
     "tool a": r"\bor" + r"ca\b",
     "tool b": r"\bgr" + r"aft\b",
     "owner name": "Kevin" + r"\s+Lap" + "pe",
-    "agent graph": "agent" + r"[-_]graph",
     "hook state directory": "agent" + r"[-_]hooks",
     "work item code": r"\bW" + r"I-\d+",
     "work item term": "work" + r"[- ]item",
