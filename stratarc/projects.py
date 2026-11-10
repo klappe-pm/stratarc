@@ -90,7 +90,7 @@ from stratarc.control_plane import ControlPlane, _cells, _option_id
 from stratarc.messages import CliError
 from stratarc.paths import home
 from stratarc.reconcile import main as reconcile_main
-from stratarc.public_targets import PublicTargetsUnreadable, is_public_checkout, load_public_targets
+from stratarc.public_targets import PublicTargetsUnreadable, checkout_identity, is_public_checkout, load_public_targets
 from stratarc.resources import data_dir
 from stratarc.rules_digest import DIGEST_BEGIN, digest_or_note, embed_digest
 from stratarc.staging import PROJECT_DIRECTORIES, build_stage, cleanup_all
@@ -163,7 +163,7 @@ def public_targets() -> frozenset[str]:
     deliver into the one checkout the file exists to protect.
     """
     try:
-        return load_public_targets(PROJECTS_SRC.parent)
+        return load_public_targets(ROOT)
     except PublicTargetsUnreadable as error:
         raise RuntimeError(str(error)) from None
 
@@ -307,7 +307,7 @@ def resolve(name: str, cp) -> tuple[pathlib.Path | None, str]:
     return _refuse_canonical(hits[0], name)
 
 
-def verify(cp) -> list[str]:
+def verify(cp, *, only: str | None = None) -> list[str]:
     """Report disagreement between the manifest and the directory tree.
 
     Neither side is corrected automatically. The manifest governs policy and
@@ -315,6 +315,8 @@ def verify(cp) -> list[str]:
     show, not a conflict for a script to settle.
     """
     out: list[str] = []
+    if only is not None and only not in cp.manifest:
+        return [f"{only}: not in the control-plane manifest"]
     projects = projects_dir()
     canonical = canonical_checkout()
     conventional = {
@@ -325,6 +327,8 @@ def verify(cp) -> list[str]:
         "external": "external",
     }
     for name in cp.manifest:
+        if only is not None and name != only:
+            continue
         status = cp.status(name)
         hits = cp.find_checkout(name, projects)
         if not hits:
@@ -342,6 +346,8 @@ def verify(cp) -> list[str]:
         actual = parts[0]
         if want and len(parts) > 1 and actual != want:
             out.append(f"{name}: listed as {status} but sits under {actual}/")
+    if only is not None:
+        return out
     # checkouts on disk that no manifest row claims, and nested repositories.
     # A public target has no row by design, so its checkout is not drift.
     listed = set(cp.manifest) | public_targets()
@@ -358,12 +364,13 @@ def verify(cp) -> list[str]:
             nested_under = _enclosing_repo(p)
             if nested_under is not None:
                 continue
-            if p.name not in listed and not _public_checkout(p):
+            identities, _origin = checkout_identity(p)
+            if not listed.intersection(identities) and not _public_checkout(p):
                 out.append(f"{p.name}: checkout at {short(p)} is not in the manifest")
     return out
 
 
-def surface_drift(cp) -> tuple[list[str], list[str]]:
+def surface_drift(cp, *, only: str | None = None) -> tuple[list[str], list[str]]:
     """Compare each active project's opted-in instruction surfaces to its master.
 
     Mirrors the source sync_project would write from: the staged view when the
@@ -376,6 +383,8 @@ def surface_drift(cp) -> tuple[list[str], list[str]]:
     divergent: list[str] = []
     shims: list[str] = []
     for name in cp.manifest:
+        if only is not None and name != only:
+            continue
         if cp.status(name) != "active":
             continue
         dst, why = resolve(name, cp)
@@ -646,7 +655,7 @@ def _relative_to(path: pathlib.Path, dst: pathlib.Path) -> str:
 
 
 
-def skill_drift(cp) -> list[str]:
+def skill_drift(cp, *, only: str | None = None) -> tuple[list[str], list[str]]:
     """Compare each active project's skill trees (SKILL_TARGETS) with its
     stage, for --verify. Returns (drift, notes).
 
@@ -662,6 +671,8 @@ def skill_drift(cp) -> list[str]:
     drift: list[str] = []
     notes: list[str] = []
     for name in cp.manifest:
+        if only is not None and name != only:
+            continue
         if cp.status(name) != "active":
             continue
         dst, _why = resolve(name, cp)
@@ -2015,7 +2026,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # The engine's reconciler, in process, handed the same root this run
     # delivers from.
-    if not args.skip_reconcile:
+    # Selected read-only verification compares that project's current source
+    # directly. Whole-root snapshot reconciliation concerns other projects
+    # and must not prevent this project's comparison from running.
+    if not args.skip_reconcile and not (args.verify and args.only):
         # --verify is read-only by contract: it never runs a writing
         # reconcile, so it always passes --check here too, the same as
         # --check does for a sync run.
@@ -2030,13 +2044,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.verify:
-        drift = verify(cp)
+        drift = verify(cp, only=args.only)
         for d in drift:
             print(f"verify: {d}")
         if not drift:
-            print(f"verify: manifest and tree agree, {len(cp.manifest)} projects")
+            print(f"verify: manifest and tree agree, {1 if args.only else len(cp.manifest)} projects")
         try:
-            divergent, shims = surface_drift(cp)
+            divergent, shims = surface_drift(cp, only=args.only)
         finally:
             cleanup_all()
         for s in shims:
@@ -2046,7 +2060,7 @@ def main(argv: list[str] | None = None) -> int:
         if not divergent:
             print(f"verify: surfaces agree with the master, {len(shims)} shims")
         try:
-            skills, skill_notes = skill_drift(cp)
+            skills, skill_notes = skill_drift(cp, only=args.only)
         finally:
             cleanup_all()
         for s in skill_notes:

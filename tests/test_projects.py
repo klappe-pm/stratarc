@@ -228,6 +228,59 @@ def test_verify_does_not_report_a_public_target_checkout(world):
     assert projects.verify(FakeControlPlane({})) == []
 
 
+def test_verify_recognizes_a_registered_project_worktree(world, tmp_path):
+    primary = tmp_path / "hub/repos/proj"
+    git("init", "-q", str(primary))
+    git(*GIT_IDENTITY, "-C", str(primary), "commit", "--allow-empty", "-m", "fixture")
+    worktree = world.projects / "active/proj-deploy"
+    worktree.parent.mkdir(parents=True)
+    git("-C", str(primary), "worktree", "add", "-q", str(worktree), "-b", "deployment")
+    world.source("proj")
+    assert projects.verify(FakeControlPlane({"proj": ("active", "normal")})) == []
+
+
+def test_verify_only_isolates_manifest_surface_and_skill_checks(world, monkeypatch, capsys):
+    cp = world.plane(table(
+        "# control-plane", "", "## projects", "",
+        "| project | status | tier | template | origin |", "|---|---|---|---|---|",
+        "| proj | active | normal | base | - |", "| other | active | normal | base | - |", "",
+        "## project-local-configuration", "",
+        "| option | global | proj | other |", "|---|---|---|---|",
+        "| project:AGENTS.md | | x | x |", "| project:skills | | x | x |",
+    ))
+    for name in cp.manifest:
+        world.source(name)
+        world.checkout(name)
+        write(world.src / name / "skills/local-skill/SKILL.md", f"{name} skill\n")
+        projects.sync_project(name, dry=False, cp=cp)
+    world.checkout("unregistered")
+    write(world.src / "other/AGENTS.md", "changed other contract\n")
+    write(world.src / "other/skills/local-skill/SKILL.md", "changed other skill\n")
+    monkeypatch.setattr(projects.ControlPlane, "load", lambda _path: cp)
+    assert any("unregistered" in item for item in projects.verify(cp))
+    assert any("other" in item for item in projects.surface_drift(cp)[0])
+    assert any("other" in item for item in projects.skill_drift(cp)[0])
+    assert projects.reconcile_main(["--root", str(world.root), "--check"]) != 0
+    capsys.readouterr()
+    assert projects.main(["--verify", "--only", "proj"]) == 0
+    output = capsys.readouterr().out
+    assert "unregistered" not in output and "other" not in output
+    write(world.src / "proj/skills/local-skill/SKILL.md", "changed selected skill\n")
+    assert projects.main(["--verify", "--only", "proj"]) == 1
+    assert "proj" in capsys.readouterr().out
+
+
+def test_verify_only_rejects_unknown_project(world):
+    assert projects.verify(FakeControlPlane({}), only="missing") == ["missing: not in the control-plane manifest"]
+
+
+def test_project_public_targets_use_the_configured_source_root(world):
+    write(world.root / "stratarc.toml", '[layout]\nproject_config_dir = "projects/roots"\n')
+    write(world.root / "projects/roots/public-targets.json", '["public-lib"]\n')
+    projects.configure_root(world.root)
+    assert projects.public_targets() == frozenset({"public-lib"})
+
+
 # projects directory
 
 
