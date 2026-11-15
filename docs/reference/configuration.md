@@ -21,7 +21,7 @@ This page documents `stratarc.toml`, the file in a source root that names the en
 
 The `layout` values are relative paths inside their root and may not contain `..`. An unknown `layout` key is an error. The defaults in the table are what a source root with no `[layout]` table gets, which is the layout Stratarc 0.3 scaffolded; a source root `stratarc init` writes today names the `projects/roots` layout explicitly. Every guide in these docs names the project configuration directory and the control plane by these keys' values, so read `projects/roots/` and `projects/roots/control-plane.md` as `projects-root/` and `control-plane.md` in a 0.3 source root.
 
-The recognised runtime names and their default targets are `claude` (`~/.claude`), `codex` (`~/.codex`), `gemini` (`~/.gemini`), `cursor` (`~/.cursor`) and `opencode` (`~/.config/opencode`), plus any runtime with an adapter in `adapters/` in the source root. A `runtimes` table whose name matches no adapter is an error. See [Runtimes](runtimes/README.md) for what each receives.
+The recognised runtime names and their default targets are `claude` (`~/.claude`), `codex` (`~/.codex`), `gemini` (`~/.gemini`), `cursor` (`~/.cursor`), `opencode` (`~/.config/opencode`) and `agy` (`~/.gemini/antigravity-cli`), plus any runtime with an adapter in `adapters/` in the source root. A `runtimes` table whose name matches no adapter is an error. See [Runtimes](runtimes/README.md) for what each receives.
 
 ## The Workflows Table
 

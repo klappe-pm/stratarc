@@ -1,6 +1,6 @@
 # Adapter Files
 
-An adapter translates the staged source into one runtime's native files. Five ship in the package, and a source root adds its own in `adapters/<name>.py`. Both kinds use the same file contract, described here. For a walkthrough, see [Add a Runtime](../how-to-guides/add-a-runtime.md).
+An adapter translates the staged source into one runtime's native files. Six ship in the package, and a source root adds its own in `adapters/<name>.py`. Both kinds use the same file contract, described here. For a walkthrough, see [Add a Runtime](../how-to-guides/add-a-runtime.md).
 
 ## Where They Are Found
 

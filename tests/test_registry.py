@@ -77,7 +77,7 @@ def test_bad_fixture_is_rejected_by_code_and_schema() -> None:
 
 def test_bundled_manifests_come_from_the_adapters_and_validate() -> None:
     manifests = registry.bundled_manifests()
-    assert set(manifests) == {"claude", "codex", "cursor", "gemini", "opencode"}
+    assert set(manifests) == {"agy", "claude", "codex", "cursor", "gemini", "opencode"}
     for name, doc in manifests.items():
         assert registry.validate_manifest(doc) == [], name
         assert list(manifest_validator().iter_errors(doc)) == [], name
@@ -128,7 +128,7 @@ def test_registered_manifest_overrides_the_bundled_one(stratarc_home: Path, tmp_
 
 
 def test_register_bundled_writes_missing_manifests_once(stratarc_home: Path) -> None:
-    assert sorted(registry.register_bundled()) == ["claude", "codex", "cursor", "gemini", "opencode"]
+    assert sorted(registry.register_bundled()) == ["agy", "claude", "codex", "cursor", "gemini", "opencode"]
     assert registry.register_bundled() == []
 
 

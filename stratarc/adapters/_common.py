@@ -646,7 +646,7 @@ def repoint_command(
     somewhere else in the managed runtime tree (the mislocated case).
 
     Only a path whose basename is source-shipped AND that lies under one
-    of the five managed runtime roots is rewritten, so a source name that
+    of the managed runtime roots is rewritten, so a source name that
     happens to appear in an unrelated absolute path is never touched.
     Everything else in the command string, including an existence guard,
     survives unchanged.

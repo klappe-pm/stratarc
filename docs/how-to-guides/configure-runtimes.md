@@ -1,6 +1,6 @@
 # Configure Runtimes
 
-This guide shows how to choose which runtimes receive your configuration, move a runtime's target directory, and keep a runtime out of a sync. A runtime is any agent tool Stratarc has an adapter for: the five that ship with it, plus any you add in [Add a Runtime](add-a-runtime.md).
+This guide shows how to choose which runtimes receive your configuration, move a runtime's target directory, and keep a runtime out of a sync. A runtime is any agent tool Stratarc has an adapter for: the six that ship with it, plus any you add in [Add a Runtime](add-a-runtime.md).
 
 ## See What Is Available
 

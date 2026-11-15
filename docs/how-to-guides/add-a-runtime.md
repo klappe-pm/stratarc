@@ -1,6 +1,6 @@
 # Add a Runtime
 
-Stratarc ships adapters for five runtimes. If you use another agent tool, you add it yourself: a runtime is one Python file in your source root, and it is managed by the same commands as the others. This guide builds one from the generated starting point.
+Stratarc ships adapters for six runtimes. If you use another agent tool, you add it yourself: a runtime is one Python file in your source root, and it is managed by the same commands as the others. This guide builds one from the generated starting point.
 
 ## Generate the Starting Point
 
@@ -8,7 +8,7 @@ Stratarc ships adapters for five runtimes. If you use another agent tool, you ad
 cd ~/stratarc-source && stratarc adapter new acme-agent --target .acme-agent
 ```
 
-This writes `adapters/acme-agent.py` and adds `~/.acme-agent` to `runtimeDirectories` in `permissions.json`, the list of directories a sync may write into. `--target` is the runtime's directory under your home; leave it out and it defaults to `.<name>`. The name is lowercase letters, digits and hyphens, and must not be one of the five that ship.
+This writes `adapters/acme-agent.py` and adds `~/.acme-agent` to `runtimeDirectories` in `permissions.json`, the list of directories a sync may write into. `--target` is the runtime's directory under your home; leave it out and it defaults to `.<name>`. The name is lowercase letters, digits and hyphens, and must not be one of the six that ship.
 
 The generated adapter already works: it copies `AGENTS.md` into the runtime's directory. Create the directory and try it:
 

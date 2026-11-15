@@ -597,7 +597,7 @@ def test_doctor_reports_the_install(stratarc_home, tmp_path, capsys):
     assert f"stratarc      {__version__}" in out
     assert str(stratarc_home) in out and "writable" in out
     assert "from --root" in out
-    assert re.search(r"adapters\s+5 registered", out)
+    assert re.search(r"adapters\s+6 registered", out)
     assert re.search(r"start time\s+[\d.]+ ms", out)
     assert re.search(r"claude\s+enabled\s+\S+ \(present\)", out)
     assert re.search(r"codex\s+disabled\s+\S+ \(absent\)", out)
@@ -614,7 +614,7 @@ def test_doctor_json_envelope(stratarc_home, source_root, capsys):
     assert data["home"] == {"path": str(stratarc_home), "exists": True, "writable": True}
     assert data["source_root"]["path"] == str(source_root)
     assert data["source_root"]["resolved_from"] == "STRATARC_SOURCE"
-    assert data["adapters"] == len(data["runtimes"]) == 5
+    assert data["adapters"] == len(data["runtimes"]) == 6
     assert isinstance(data["start_ms"], float)
 
 

@@ -28,6 +28,7 @@ Where each runtime keeps user-scope MCP servers:
     opencode  mcp in opencode.jsonc                              rendered
     claude    mcpServers in ~/.claude.json, outside ~/.claude    not rendered
     cursor    mcpServers in ~/.cursor/mcp.json                   not rendered until confirmed live
+    agy       global MCP configuration under ~/.gemini/config     not rendered until confirmed live
 """
 
 from __future__ import annotations
@@ -77,6 +78,9 @@ _NOT_RENDERED = {
     "cursor": (
         "is not rendered: Cursor's MCP configuration joins after it is confirmed on a live install "
         "(pending the component manifest's Cursor slice)"
+    ),
+    "agy": (
+        "is not rendered: Antigravity CLI's MCP configuration joins after it is confirmed on a live install"
     ),
 }
 
@@ -278,7 +282,7 @@ def translate_model(value: Any, aliases: Any) -> Optional[str]:
 # Runtimes that cannot read a Claude short name (opus, sonnet) and so need an
 # alias for it. Claude Code reads its own names; Cursor copies agent files as
 # they are and has no default model key an adapter writes.
-ALIASED_RUNTIMES = ("codex", "gemini", "opencode")
+ALIASED_RUNTIMES = ("codex", "gemini", "opencode", "agy")
 # Runtimes with a runtime-wide subagent model key an adapter writes. Gemini CLI
 # and OpenCode set a subagent's model per agent only.
 SUBAGENT_MODEL_RUNTIMES = ("claude", "codex")

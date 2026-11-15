@@ -1,6 +1,6 @@
 # agents
 
-This source root holds the instructions, rules, hooks, skills, commands, agents and permissions that `stratarc sync` compiles into Claude Code, Codex, Gemini CLI, Cursor and OpenCode. Runtime directories such as `~/.claude` are generated output; edit the files here, not the deployed copies.
+This source root holds the instructions, rules, hooks, skills, commands, agents and permissions that `stratarc sync` compiles into Claude Code, Codex, Gemini CLI, Cursor, OpenCode and Antigravity CLI. Runtime directories such as `~/.claude` are generated output; edit the files here, not the deployed copies.
 
 ## source-and-output-boundary
 

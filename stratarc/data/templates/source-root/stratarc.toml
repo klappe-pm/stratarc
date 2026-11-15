@@ -28,6 +28,10 @@ target = "~/.cursor"
 enabled = false
 target = "~/.config/opencode"
 
+[runtimes.agy]
+enabled = false
+target = "~/.gemini/antigravity-cli"
+
 # Where this source root keeps project configuration, the control plane, and where each project keeps
 # internal work product. `stratarc reconcile` keeps the control plane's inventory current; set
 # `control_plane_managed = false` to maintain it by hand instead.

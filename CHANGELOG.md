@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+### Added
+
+- Antigravity CLI (`agy`) is a bundled runtime, the sixth, with the default target `~/.gemini/antigravity-cli`. Its adapter renders `skills/` and writes the `model` key of `settings.json` from `runtime_settings.agy`, translated through `runtime_settings.agy.aliases`, so a short name or a provider-qualified model id maps to the label agy stores. It writes no instruction file, because agy reads `~/.gemini/GEMINI.md`, and it renders no hooks, permissions or MCP servers. Enable it with a `[runtimes.agy]` table and list its directory under `runtimeDirectories` in `permissions.json`. A source root that already has `adapters/agy.py` must remove it, because a source adapter that reuses a bundled name is refused.
+
 ## 0.4.1 - 2026-11-15
 
 ### Changed
