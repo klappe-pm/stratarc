@@ -4,7 +4,7 @@ This page explains how Stratarc turns one source root into a configuration for e
 
 ## The Idea
 
-Every agent runtime wants the same few things in its own words: standing instructions, permissions, hooks, skills, commands and agents. Maintained by hand, five runtimes drift apart. Stratarc keeps one source root, a directory you put in git, and treats each runtime directory as generated output. Nothing in the runtime directories is authoritative, which is why a sync may overwrite what it owns.
+Every agent runtime wants the same few things in its own words: standing instructions, permissions, hooks, skills, commands and agents. Maintained by hand, six runtimes drift apart. Stratarc keeps one source root, a directory you put in git, and treats each runtime directory as generated output. Nothing in the runtime directories is authoritative, which is why a sync may overwrite what it owns.
 
 ## The Stages
 

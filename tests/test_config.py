@@ -7,7 +7,7 @@ from conftest import PACKAGE_DIR, REPO_ROOT
 
 TEMPLATE = PACKAGE_DIR / "data" / "templates" / "source-root"
 EXAMPLE = REPO_ROOT / "examples" / "notes-cli" / "source"
-RUNTIMES = {"claude", "codex", "gemini", "cursor", "opencode"}
+RUNTIMES = {"agy", "claude", "codex", "gemini", "cursor", "opencode"}
 
 
 @pytest.fixture(autouse=True)

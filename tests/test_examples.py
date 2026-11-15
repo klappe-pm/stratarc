@@ -142,7 +142,7 @@ def enabled_runtimes() -> list[str]:
 
 
 def test_every_runtime_is_enabled() -> None:
-    assert enabled_runtimes() == ["claude", "codex", "cursor", "gemini", "opencode"]
+    assert enabled_runtimes() == ["agy", "claude", "codex", "cursor", "gemini", "opencode"]
 
 
 @pytest.mark.parametrize("runtime", enabled_runtimes())
@@ -183,6 +183,7 @@ def test_no_session_link_anywhere_in_examples() -> None:
 
 # Where each directory under expected/ lands below the home.
 DEPLOYED = {
+    "agy": ".gemini/antigravity-cli",
     "claude": ".claude",
     "codex": ".codex",
     "gemini": ".gemini",
@@ -232,7 +233,11 @@ def deployed_tree(home: Path) -> dict[str, bytes]:
     for name, directory in DEPLOYED.items():
         base = home / directory
         for path in sorted(base.rglob("*")):
-            if path.is_file() and ".git" not in path.relative_to(base).parts:
+            parts = path.relative_to(base).parts
+            # Antigravity CLI's directory sits inside Gemini CLI's; each belongs to its own runtime.
+            if name == "gemini" and parts[:1] == ("antigravity-cli",):
+                continue
+            if path.is_file() and ".git" not in parts:
                 tree[f"{name}/{path.relative_to(base).as_posix()}"] = path.read_bytes()
     return tree
 

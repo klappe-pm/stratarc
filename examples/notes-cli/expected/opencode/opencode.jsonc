@@ -21,7 +21,8 @@
       "~/.codex/**": "allow",
       "~/.gemini/**": "allow",
       "~/.cursor/**": "allow",
-      "~/.config/opencode/**": "allow"
+      "~/.config/opencode/**": "allow",
+      "~/.gemini/antigravity-cli/**": "allow"
     }
   }
 }

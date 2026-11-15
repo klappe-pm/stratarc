@@ -4,7 +4,7 @@
 # The directory that holds your project checkouts. `~` expands to your home directory.
 projects_root = "~/projects"
 
-# One table per supported runtime. This developer uses all five.
+# One table per supported runtime. This developer uses all six.
 #   enabled: whether `stratarc sync` builds and deploys this runtime.
 #   target:  the directory the runtime reads its configuration from.
 
@@ -27,3 +27,7 @@ target = "~/.cursor"
 [runtimes.opencode]
 enabled = true
 target = "~/.config/opencode"
+
+[runtimes.agy]
+enabled = true
+target = "~/.gemini/antigravity-cli"

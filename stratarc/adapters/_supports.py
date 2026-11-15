@@ -16,6 +16,14 @@ This module is not an adapter: the leading underscore keeps it out of the runtim
 from __future__ import annotations
 
 SUPPORTS: dict[str, dict[str, str]] = {
+    "agy": {
+        "supports": ">=1.5,<2",
+        "tested": "1.5.5",
+        "tested_on": "2026-11-15",
+        "exercised_by": "tests/test_adapters_agy.py; examples/notes-cli/expected/agy",
+        # The settings schema (https://antigravity.google/schemas/v1/settings.json) defines the string key `model`; the skills directory is from agy's /skills listing.
+        "evidence": "none in the repository; lower bound is the tested major.minor",
+    },
     "claude": {
         "supports": ">=2.1,<3",
         "tested": "2.1.296",
@@ -59,6 +67,7 @@ SUPPORTS: dict[str, dict[str, str]] = {
 
 # Per runtime: the command, its arguments and the regex whose first group is the version. Output of stdout and stderr is searched together, so a credentials notice printed first (codex) is skipped.
 DETECT: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "agy": ("agy", ("--version",), r"(\d+\.\d+\.\d+)"),
     "claude": ("claude", ("--version",), r"(\d+\.\d+\.\d+)"),
     "codex": ("codex", ("--version",), r"codex-cli\s+(\d+\.\d+\.\d+)"),
     "cursor": ("cursor-agent", ("--version",), r"(\d{4}\.\d{1,2}\.\d{1,2})"),

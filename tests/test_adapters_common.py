@@ -488,6 +488,7 @@ class TestRuntimeRegistry(unittest.TestCase):
         self.assertEqual(
             {name: runtime.target(home) for name, runtime in registry.items()},
             {
+                "agy": home / ".gemini" / "antigravity-cli",
                 "claude": home / ".claude",
                 "codex": home / ".codex",
                 "cursor": home / ".cursor",
@@ -498,6 +499,7 @@ class TestRuntimeRegistry(unittest.TestCase):
         self.assertEqual(
             {name: runtime.hook_registry for name, runtime in registry.items()},
             {
+                "agy": None,
                 "claude": "settings.json",
                 "codex": "hooks.json",
                 "cursor": "hooks.json",
@@ -510,7 +512,7 @@ class TestRuntimeRegistry(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             registry = self.registry(fixture_adapters_with_a_sixth(Path(tmp)))
         self.assertIn("sixth", registry)
-        self.assertEqual(len(registry), 6)
+        self.assertEqual(len(registry), 7)
         self.assertEqual(registry["sixth"].target(Path("/h")), Path("/h/.sixth"))
         self.assertIn("SessionStart", registry["sixth"].hook_events)
 

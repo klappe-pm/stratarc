@@ -14,7 +14,7 @@
   <a href="https://github.com/klappe-pm/stratarc/tags"><img src="https://img.shields.io/github/v/tag/klappe-pm/stratarc?style=flat-square&color=3ddc84&labelColor=162233&label=release" alt="Latest release"></a>
   <a href="https://github.com/klappe-pm/stratarc/blob/main/LICENSE"><img src="https://img.shields.io/github/license/klappe-pm/stratarc?style=flat-square&color=5aa9ff&labelColor=162233&label=license" alt="MIT license"></a>
   <a href="https://github.com/klappe-pm/stratarc/blob/main/pyproject.toml"><img src="https://img.shields.io/badge/dependencies-none-3ddc84?style=flat-square&labelColor=162233" alt="No runtime dependencies"></a>
-  <a href="https://github.com/klappe-pm/stratarc/blob/main/docs/README.md"><img src="https://img.shields.io/badge/runtimes-5-5aa9ff?style=flat-square&labelColor=162233" alt="Five supported runtimes"></a>
+  <a href="https://github.com/klappe-pm/stratarc/blob/main/docs/README.md"><img src="https://img.shields.io/badge/runtimes-6-5aa9ff?style=flat-square&labelColor=162233" alt="Six supported runtimes"></a>
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@
 
 ---
 
-If you use more than one coding agent, you already know the problem. Claude Code wants a `CLAUDE.md` and a `settings.json`. Codex wants `AGENTS.md`. Gemini CLI, Cursor and OpenCode each want their own layout, their own hook format and their own idea of what a rule or a skill looks like. You end up with five copies of the same instructions, and they drift apart the moment you stop paying attention.
+If you use more than one coding agent, you already know the problem. Claude Code wants a `CLAUDE.md` and a `settings.json`. Codex wants `AGENTS.md`. Gemini CLI, Cursor, OpenCode and Antigravity CLI each want their own layout, their own hook format and their own idea of what a rule or a skill looks like. You end up with five copies of the same instructions, and they drift apart the moment you stop paying attention.
 
 Stratarc gives you one place to write it all down. You keep a single source tree of instructions, rules, hooks, skills, commands, agents and permissions. Stratarc compiles that tree into the native format of any runtime you enable and deploys it into the right directory. Edit once, sync, and every agent receives as much of that configuration as its runtime can express. Where a runtime has no equivalent (Cursor takes no skills, commands or agents, for one), nothing is invented: the [runtimes reference](https://github.com/klappe-pm/stratarc/blob/main/docs/reference/runtimes/README.md) lists what each runtime receives and what it does not.
 
@@ -51,7 +51,7 @@ Stratarc gives you one place to write it all down. You keep a single source tree
 
 ## Highlights
 
-- **Any runtime, one source.** Claude Code, Codex, Gemini CLI, Cursor and OpenCode are all rendered from the same tree; enable the ones you use.
+- **Any runtime, one source.** Claude Code, Codex, Gemini CLI, Cursor, OpenCode and Antigravity CLI are all rendered from the same tree; enable the ones you use.
 - **Everything agents read.** Instructions, rules, hooks, skills, commands, subagents and permissions, each translated into the form the runtime expects.
 - **Safe by default.** `diff` and `check` show exactly what would change before `sync` writes anything, and Stratarc only ever touches files it owns.
 - **Validated before deploy.** The source root's hook registry and component manifest are checked against the contracts in the bundled JSON Schemas, and the rest against the engine's own rules, before every run writes anything.
@@ -135,6 +135,7 @@ On `sync`, Stratarc validates the tree, hands it to one adapter per enabled runt
 | Gemini CLI | `~/.gemini` | `GEMINI.md`, `settings.json`, policies, hooks, skills |
 | Cursor | `~/.cursor` | rules, hooks, `hooks.json` |
 | OpenCode | `~/.config/opencode` | `AGENTS.md`, `opencode.jsonc`, rules, hooks, skills |
+| Antigravity CLI | `~/.gemini/antigravity-cli` | skills, `settings.json` model |
 
 The runtime directories are generated output. Change the source, run `sync`, and they are rebuilt. `sync --verify` proves that what is on disk matches what the adapters render; it does not prove that a runtime loads and enforces them. Each adapter records the newest runtime version it was tested against, and `stratarc adapter status` compares that with the version you have installed.
 

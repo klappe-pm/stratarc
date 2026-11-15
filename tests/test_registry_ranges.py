@@ -48,7 +48,7 @@ def test_the_tables_cover_every_bundled_adapter() -> None:
 def test_every_row_is_complete_and_consistent() -> None:
     for name, row in SUPPORTS.items():
         assert registry.RANGE_PATTERN.match(row["supports"]) and row["supports"] != "*", name
-        assert row["tested_on"] == "2026-10-09" and row["exercised_by"] and row["evidence"], name
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", row["tested_on"]) and row["exercised_by"] and row["evidence"], name
         assert registry.in_range(registry.parse_version(row["tested"]), row["supports"]), name
 
 

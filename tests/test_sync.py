@@ -586,7 +586,7 @@ class TestRuntimeRegistry:
         (stage / "hooks").mkdir(parents=True)
         (stage / "hooks" / "hooks.json").write_text(json.dumps({event: [] for event in ("PreToolUse", "PostToolUse", "Stop", "UserPromptSubmit", "SessionStart")}))
         assert runtimes["sixth"] == ("stratarc.adapters.sixth", home / ".sixth")
-        assert len(runtimes) == 6
+        assert len(runtimes) == 7
         assert sync.unmapped_hook_events(stage, "sixth", maps) == set()
 
 
@@ -1936,7 +1936,7 @@ class TestHomeLayout:
         root.mkdir()
         assert run_main("--root", str(root))[0] == 0
         layout = stratarc_home / ".stratarc"
-        assert sorted(p.name for p in (layout / "adapters").iterdir()) == ["claude", "codex", "cursor", "gemini", "opencode"]
+        assert sorted(p.name for p in (layout / "adapters").iterdir()) == ["agy", "claude", "codex", "cursor", "gemini", "opencode"]
         assert (layout / "config.toml").is_file()
         assert layout.stat().st_mode & 0o777 == 0o700
 

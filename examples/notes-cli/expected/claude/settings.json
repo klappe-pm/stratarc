@@ -22,7 +22,8 @@
       "~/.codex",
       "~/.gemini",
       "~/.cursor",
-      "~/.config/opencode"
+      "~/.config/opencode",
+      "~/.gemini/antigravity-cli"
     ]
   },
   "hooks": {

@@ -4,7 +4,7 @@ A worked example of stratarc from the first command to the last. It is small eno
 
 ## The Scenario
 
-You maintain `notes-cli`, a command-line notes tool written in Python. You use Claude Code, Codex, Gemini CLI, Cursor and OpenCode, and you were tired of keeping five configurations in step by hand. So you keep one source root, `~/stratarc-source`, and let stratarc render it into all five.
+You maintain `notes-cli`, a command-line notes tool written in Python. You use Claude Code, Codex, Gemini CLI, Cursor, OpenCode and Antigravity CLI, and you were tired of keeping six configurations in step by hand. So you keep one source root, `~/stratarc-source`, and let stratarc render it into all six.
 
 Three things matter to you, and they are what the example configures:
 
@@ -20,7 +20,7 @@ Everything under `source/`. A file marked "no row" is read directly by the engin
 
 | file | why it exists | control-plane row |
 | --- | --- | --- |
-| `stratarc.toml` | Enables all five runtimes, names their target directories, and names the projects root that holds the checkouts. | linked from the runtime rows |
+| `stratarc.toml` | Enables all six runtimes, names their target directories, and names the projects root that holds the checkouts. | linked from the runtime rows |
 | `AGENTS.md` | The instructions every agent reads. It carries a marker pair where the rules digest is written. | `instruction-file` |
 | `permissions.json` | The single permission policy, in Claude Code rule syntax, that each runtime adapter translates into its own enforcement. | no row |
 | `components.json` | The manifest of external components. This example declares none. | no row |
@@ -143,7 +143,7 @@ cd ~/stratarc-source && stratarc sync
 
 ### 6. What Appears Under Each Runtime
 
-The same source becomes five different layouts, because each runtime reads its own formats.
+The same source becomes six different layouts, because each runtime reads its own formats.
 
 ```text
 ~/.claude/                       Claude Code
