@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+## 0.4.1 - 2026-11-15
+
 ### Changed
 
 - The default `workflows.paths.plan` is now `.docs/PLAN.md` instead of `PLAN.md`. A project that enables workflows and keeps its plan at the checkout root must set `paths.plan = "PLAN.md"`. The handoff, backlog and reports defaults are unchanged.
@@ -11,6 +13,7 @@ All notable changes to this project are documented in this file. The format foll
 
 ### Fixed
 
+- `stratarc drift --repo <path>` no longer requires a source root, so the drift check in a project checkout works outside the source repository. Before, it failed with msg-1009.
 - A project with a primary binding in `local/project-locations.json` resolves to that checkout alone. Before, another folder with the same name under the projects root, such as a test copy, made the project ambiguous, and `stratarc projects` skipped its delivery.
 
 ## 0.4.0 - 2026-11-15

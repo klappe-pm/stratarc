@@ -67,10 +67,10 @@ Stratarc needs Python 3.11 or newer. [pipx](https://pipx.pypa.io/) is the easies
 pipx install stratarc
 ```
 
-Or pin a tagged release straight from GitHub, here 0.4.0, the newest release published to PyPI:
+Or pin a tagged release straight from GitHub, here 0.4.1, the newest release published to PyPI:
 
 ```bash
-pipx install git+https://github.com/klappe-pm/stratarc@v0.4.0
+pipx install git+https://github.com/klappe-pm/stratarc@v0.4.1
 ```
 
 The docs on the default branch describe the code there, which can be ahead of the newest release (see Unreleased in the [changelog](CHANGELOG.md)); install from `git+https://github.com/klappe-pm/stratarc` without a tag to match them exactly.

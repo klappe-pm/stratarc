@@ -20,6 +20,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install stratarc
-        run: pipx install stratarc==0.4.0
+        run: pipx install stratarc==0.4.1
       - name: Agent file drift
         run: stratarc drift --repo
