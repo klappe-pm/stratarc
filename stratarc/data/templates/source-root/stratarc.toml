@@ -1,0 +1,54 @@
+# stratarc configuration for this source root.
+# `stratarc sync` reads this file to decide which runtimes to build and where to deploy them.
+
+# The directory that holds your project checkouts. `~` expands to your home directory.
+projects_root = "~/projects"
+
+# One table per supported runtime.
+#   enabled: whether `stratarc sync` builds and deploys this runtime.
+#   target:  the directory the runtime reads its configuration from; `~` expands to your home directory.
+
+[runtimes.claude]
+enabled = true
+target = "~/.claude"
+
+[runtimes.codex]
+enabled = false
+target = "~/.codex"
+
+[runtimes.gemini]
+enabled = false
+target = "~/.gemini"
+
+[runtimes.cursor]
+enabled = false
+target = "~/.cursor"
+
+[runtimes.opencode]
+enabled = false
+target = "~/.config/opencode"
+
+# Where this source root keeps project configuration, the control plane, and where each project keeps
+# internal work product. `stratarc reconcile` keeps the control plane's inventory current; set
+# `control_plane_managed = false` to maintain it by hand instead.
+[layout]
+project_config_dir = "projects/roots"
+control_plane = "projects/roots/control-plane.md"
+local_dir = "local"
+control_plane_managed = true
+
+# The optional workflow module. It is off until `enabled = true`; a project can also turn it on in
+# `projects/roots/<project>/workflows.toml`. Every key is optional, gates may only tighten the standing
+# policy, and each check starts in `report` mode. `stratarc workflows check` validates this table.
+# [workflows]
+# enabled = true
+#
+# [workflows.paths]
+# plan = ".docs/PLAN.md"
+# handoff = "local/handoff.md"
+#
+# [workflows.gates]
+# deploy = "G3"
+#
+# [workflows.tickets]
+# backend = "backlog"

@@ -1,0 +1,98 @@
+# Changelog
+
+All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## Unreleased
+
+### Changed
+
+- The default `workflows.paths.plan` is now `.docs/PLAN.md` instead of `PLAN.md`. A project that enables workflows and keeps its plan at the checkout root must set `paths.plan = "PLAN.md"`. The handoff, backlog and reports defaults are unchanged.
+- Drift record and instruction file scans now include a top-level `.docs` folder. Nested `.docs` folders and every other dot folder stay skipped.
+
+### Fixed
+
+- A project with a primary binding in `local/project-locations.json` resolves to that checkout alone. Before, another folder with the same name under the projects root, such as a test copy, made the project ambiguous, and `stratarc projects` skipped its delivery.
+
+## 0.4.0 - 2026-11-15
+
+### Added
+
+- `permissions.json` accepts `sandboxEnabled`: `false` turns off native shell sandboxing in Claude Code and Gemini CLI settings and, for Codex, drops the managed permission profile, sets `sandbox_mode = "danger-full-access"` and disables the network proxy, in runtime and project outputs alike. Omission keeps the existing sandbox policy. A new optional `codexApprovalsReviewer` (`user` or `auto_review`) sets Codex's `approvals_reviewer`.
+- `SessionEnd` is a canonical hook event. Claude Code and Codex receive it natively, Cursor as `sessionEnd` and Gemini CLI as `SessionEnd`; OpenCode accepts it but dispatches nothing, since its bridge sees no event that means the session closed.
+- An optional canonical project registry at `projects/registry.json`, with local primary checkout bindings in `local/project-locations.json`. When present it supplies project lifecycle state to the control plane, reconcile and `stratarc projects`, project delivery runs under a source write lock, and `stratarc projects --new` registers the project with a compare and swap on the registry revision. Without the file, lifecycle state still comes from the control plane. In either case a checkout reached through a symlink inside the projects root is no longer matched to a project.
+- `codexApprovalsReviewer` in `permissions.json` manages Codex's `approvals_reviewer` in global and existing managed project configurations. Set it to `auto_review` with `codexApprovalPolicy: on-request` to route eligible approval requests through automatic review.
+
+- A `[layout]` table in `stratarc.toml` names the source root's project configuration directory (`project_config_dir`), control plane file (`control_plane`) and each project's internal work product folder (`local_dir`). `control_plane_managed = false` marks a hand maintained control plane that reconcile leaves alone. Defaults keep the 0.3 layout.
+
+### Changed
+
+- The rules digest rewrites `../` links in a rule so they resolve from the document that embeds the digest, and the source graph reads digest headings only inside the digest markers.
+
+- Releases publish through PyPI trusted publishing from a tag-triggered workflow, `.github/workflows/release.yml`, with every action pinned to a commit and every tool installed from a hash pinned lock file. No PyPI token is used. The cut-a-release guide describes the one-time setup.
+- The test extra requires pytest 9.0.3 or newer, since earlier releases carry CVE-2025-71176, and the build backend is pinned to hatchling 1.27 or newer, below 2.
+
+### Fixed
+
+- `validate`, and with it the gate before every `sync`, `check` and `diff`, holds `hooks/hooks.json` to `hooks.schema.json` (new `hook-registry` check): an unknown event, a group without hooks, a hook whose type is not `command`, an empty command or a timeout that is not a number greater than 0 is refused with its event, group and hook index, never its command.
+- A runtime whose installed version cannot be detected is no longer deployed silently when its adapter declares a supported range: `sync` warns once with `msg-1156` that the range was not checked, and the new `sync --strict-versions` refuses it with exit 5.
+- `diff` on a source root whose control plane is stale previews against the control plane `sync` would reconcile, kept in memory, so a fresh scaffold's preview names the instruction files the deploy replaces (`~/.claude/CLAUDE.md`, for one) instead of omitting them.
+- `stratarc projects --new NAME` copies the optional `workflows.toml` only with `--workflows`, also from `templates/project/roots/`, where the bundled template keeps it, and in a projects root with no status folders it works on the checkout at `NAME` rather than `active/NAME`.
+- `public-targets.json` is read from the source root's project configuration directory (`layout.project_config_dir`), where `stratarc projects --new NAME --public` writes it, and from the 0.3 location `projects-root/` as well. In a source root scaffolded with the `projects/roots` layout the list was ignored, so a checkout listed as public still received a control plane column, a snapshot and delivered configuration.
+- A write run checks every runtime (hook mappings, adapter, deploy stamp, adapter version, target writability) before writing to any of them, so a predictable failure writes nothing. A failure found during the write is reported as a target by target account (`changed`, `current`, `failed`, `not-attempted`) and recorded in `~/.stratarc/state/deploy-last.json` as `complete`, `failed`, `partial`, `restored` or `restore-failed`; with `--rollback-on-drift` the runtimes already written are restored, and a restoration that cannot complete exits 5.
+- A verify report (from `sync --verify`) lists the expected, compared, verified, drifted, skipped and excluded runtimes and projects with reasons, and its result distinguishes `incomplete` and `no-targets` from `verified`, so zero installed runtimes no longer reads as a successful verification. Exit statuses are unchanged; the new `sync --require-complete` exits 5 unless every expected target was compared and matched. Each report states that it shows file consistency, not runtime behavior.
+- Project skill delivery no longer overwrites a file a project edited after delivery, keeps the original delivery hash so the file stays protected, and keeps legacy manifest entries that have no hash.
+- Project delivery refuses a symlinked `.claude`, `.agents` or delivery manifest, and skill delivery, pruning and `--verify` no longer follow a symlink at or above a skill path.
+- `prune` deletes a file in an owned directory only when the new deploy ledger (`~/.stratarc/state/deployed.json`, written by every sync) records that Stratarc deployed it, so a command, prompt or agent made by hand is reported as `unmanaged` and kept. The dry run names the evidence for each removal, and a real prune copies every deleted file to `~/.stratarc/backups/prune/` first.
+- OpenCode hooks at a nondefault target run that target's registry and scripts: the bridge reads the registry beside the plugins directory it was installed into, the registry names the target's hooks directory (shell-quoted, so a path with spaces works), and a missing or malformed registry is reported on stderr instead of silently running nothing.
+- The OpenCode bridge checks an `apply_patch` call once per affected file, move destinations and deletions included, with the operation and the whole patch in each payload, so a hook denying a second or deleted file blocks the call. A patch it cannot read blocks instead of being checked in part.
+- `stratarc projects` help no longer names a fixed `projects-root/` directory: the command summary, `--only`, `--adopt` and the examples refer to the configured project configuration directory (`layout.project_config_dir`), and the generated command reference is regenerated to match.
+
+## 0.3.1 - 2026-10-14
+
+### Changed
+
+- Before asking to deploy, setup names the project checkouts the deploy writes into, since it replaces files such as `AGENTS.md` and `CLAUDE.md` in each.
+
+### Fixed
+
+- Setup no longer writes into project checkouts before you answer the deploy prompt. In 0.3.0 it wrote `.docs/stratarc-control-plane.md` into every git checkout under the projects root's `active/` folder even when you answered `n`. It now refreshes only the source root's `control-plane.md`, and the snapshots are written by the deploy.
+
+## 0.3.0 - 2026-10-14
+
+### Added
+
+- `stratarc` with no command starts a guided setup the first time: it creates or adopts a source root, enables the runtimes it finds installed, previews the first deploy and deploys only on an explicit yes. Once set up, it prints where the source root is and the commands to run next. Outside a terminal it prints the help.
+- `stratarc setup`, the same guided setup on demand. It records the source root in `~/.stratarc/config.toml`, so later commands find it from any directory.
+- `stratarc help [COMMAND]`, and examples in the help of every command.
+- A mistyped command names the closest one (`stratarc synk` suggests `stratarc sync`).
+- Every error line ends with a link to its entry in the error reference.
+
+### Changed
+
+- An argument a command does not take is reported against that command's usage, not the top-level one, and with `--json` every usage error prints one envelope (`msg-1010`, `msg-1011`, `msg-1014`).
+- `init` ends by printing the commands to run next.
+- With `--json`, an engine command's `data.exit` is the status stratarc exits with. It used to be the status the command's module returned, so `stratarc --json check` reported `"exit": 1` on drift while exiting 6. A caller that read 1 as drift must now read 6.
+
+### Fixed
+
+- A command run in a directory with no `stratarc.toml` at or above it, and no other source root configured, is refused with `msg-1009`. It used to treat that directory as a source root, and `sync` wrote a `control-plane.md` into it before failing. A source root you run commands from without `--root` or `STRATARC_SOURCE` now needs a `stratarc.toml`; an empty one uses the defaults.
+- `stratarc doctor` reports that case as a problem, and reports a remembered source root that no longer holds `stratarc.toml` (`msg-1013`).
+- The generated command reference shows a required option without brackets in its usage line, so `adapter deprecate` no longer presents `--reason` and `--end-date` as optional.
+- `validate`, `projects`, `gen-rules-digest` and `components` check their arguments before looking for the source root, so `stratarc validate --bogus` outside a source root reports the usage error (`msg-1014`) instead of `msg-1009`.
+- An argument a forwarded command does not take is reported before a missing required one, so `stratarc gen-rules-digest --bogus` names `--bogus` instead of the missing mode flag.
+
+## 0.2.0 - 2026-10-14
+
+The first release to carry the product as specified. Versions 0.1.0 and 0.1.1 were withdrawn and are not available.
+
+### Added
+
+- `stratarc init`, `doctor`, `sync`, `check`, `diff`, `prune`, `reconcile`, `validate`, `projects`, `gen-rules-digest`, `components` and `adapter`.
+- Adapters for Claude Code, Codex, Gemini CLI, Cursor and OpenCode, rendering instructions, rules, hooks, skills, commands, agents, permissions, MCP servers and plugins from one source root.
+- Your own runtimes: `stratarc adapter new <name>` writes `adapters/<name>.py` in the source root, and sync, check, diff and prune manage it like the shipped ones. A `[runtimes.<name>]` table with no adapter is now an error, where it used to be ignored.
+- A control plane (`control-plane.md`) recording which source item reaches which scope, maintained by `stratarc reconcile`.
+- Project delivery for checkouts that sit directly under the projects root, or under `active/`, `new/`, `inactive/`, `archived/` and `external/` status folders.
+- Verified deploys: `sync --verify` and `sync --verify --rollback-on-drift`, and a stamp that refuses to write an older permission policy over a newer one.
+- `check` and `diff` report a rule added or edited since the last sync, before any sync re-embeds the rules digest.
+- A sync adds and updates files and never deletes; `prune` removes what the source no longer produces.
+- A worked example in `examples/notes-cli/` and documentation in `docs/`, arranged by Diátaxis quadrant.

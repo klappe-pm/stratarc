@@ -1,0 +1,4 @@
+{
+  "$comment": "Hook file names the engine once shipped under hooks/ and has since renamed or removed, relative to hooks/ (e.g. \"lib/git-event.sh\"). Sync prunes these from every managed project's hook directories and drops any stale registration of them. Append a name here whenever a hook file is renamed or removed; never remove an entry.",
+  "retired": []
+}

@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest a capability, including support for another runtime.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: The need
+      description: What you are trying to do and why it cannot be done today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: An idea for how it could work
+      description: Optional. A runtime of your own can be added with `stratarc adapter new`; say if that does not cover your case.

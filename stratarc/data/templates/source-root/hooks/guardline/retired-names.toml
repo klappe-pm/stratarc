@@ -1,0 +1,11 @@
+schema_version = 1
+
+# Names of systems your source root has retired. Replace the example pattern with the names you retired, one alternative per name, and keep the example lines true so `guardline rules check` still validates the rule. Guardline judges one text at a time, which is all this needs. Comparing two files is `stratarc drift`.
+
+[[rule]]
+id = "retired-name"
+family = "house"
+description = "Text naming a system this source root retired; cite its replacement instead."
+pattern = '\bold-sync-script\.py\b|\bretired-folder/'
+example_fires = "run old-sync-script.py before the commit"
+example_clean = "run stratarc sync before the commit"

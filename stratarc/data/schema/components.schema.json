@@ -1,0 +1,424 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "components.json",
+  "description": "The manifest of external components a source root declares: MCP servers, plugins, foreign hook groups, third-party skills, command-line dependencies, per-runtime settings and environments.",
+  "$comment": "Checks the engine performs in code that a JSON Schema cannot express: entry names are unique within a section; a foreign hook's registration runtimes are a subset of its own runtimes; runtime names are the adapters' registry, not a list kept here.",
+  "type": "object",
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "runtime_settings": {
+      "$ref": "#/$defs/runtimeSettings"
+    },
+    "mcp_servers": {
+      "$ref": "#/$defs/section",
+      "items": {
+        "$ref": "#/$defs/mcpServer"
+      }
+    },
+    "plugins": {
+      "$ref": "#/$defs/section",
+      "items": {
+        "$ref": "#/$defs/plugin"
+      }
+    },
+    "foreign_hooks": {
+      "$ref": "#/$defs/section",
+      "items": {
+        "$ref": "#/$defs/foreignHook"
+      }
+    },
+    "third_party_skills": {
+      "$ref": "#/$defs/section",
+      "items": {
+        "$ref": "#/$defs/thirdPartySkill"
+      }
+    },
+    "dependencies": {
+      "$ref": "#/$defs/section",
+      "items": {
+        "$ref": "#/$defs/dependency"
+      }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nonEmptyStringList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    },
+    "runtime": {
+      "enum": [
+        "claude",
+        "codex",
+        "cursor",
+        "gemini",
+        "opencode"
+      ]
+    },
+    "platform": {
+      "enum": [
+        "darwin",
+        "linux"
+      ]
+    },
+    "modelName": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "concreteModelName": {
+      "description": "A model name; runtimes other than claude refuse inherit and default.",
+      "$ref": "#/$defs/nonEmptyString",
+      "not": {
+        "pattern": "^\\s*([Ii][Nn][Hh][Ee][Rr][Ii][Tt]|[Dd][Ee][Ff][Aa][Uu][Ll][Tt])\\s*$"
+      }
+    },
+    "aliases": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    },
+    "runtimeSettingsClaude": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "$ref": "#/$defs/modelName"
+        },
+        "subagent_model": {
+          "$ref": "#/$defs/modelName"
+        },
+        "aliases": {
+          "$ref": "#/$defs/aliases"
+        },
+        "settings": {
+          "type": "object"
+        }
+      }
+    },
+    "runtimeSettingsOther": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "$ref": "#/$defs/concreteModelName"
+        },
+        "subagent_model": {
+          "$ref": "#/$defs/concreteModelName"
+        },
+        "aliases": {
+          "$ref": "#/$defs/aliases"
+        },
+        "settings": {
+          "type": "object"
+        }
+      }
+    },
+    "runtimeSettingsOpencode": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "$ref": "#/$defs/concreteModelName"
+        },
+        "subagent_model": {
+          "$ref": "#/$defs/concreteModelName"
+        },
+        "aliases": {
+          "$ref": "#/$defs/aliases"
+        },
+        "settings": {
+          "type": "object"
+        },
+        "provider": {
+          "description": "A custom OpenAI-compatible provider: provider id to its configuration object.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "runtimeSettings": {
+      "description": "Per-runtime model, subagent model, alias map and native settings passthrough.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "claude": {
+          "$ref": "#/$defs/runtimeSettingsClaude"
+        },
+        "codex": {
+          "$ref": "#/$defs/runtimeSettingsOther"
+        },
+        "cursor": {
+          "$ref": "#/$defs/runtimeSettingsOther"
+        },
+        "gemini": {
+          "$ref": "#/$defs/runtimeSettingsOther"
+        },
+        "opencode": {
+          "$ref": "#/$defs/runtimeSettingsOpencode"
+        }
+      }
+    },
+    "section": {
+      "description": "A component section: a list of entries, or null for none.",
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "commonEntry": {
+      "description": "The keys every component entry carries.",
+      "type": "object",
+      "required": [
+        "name",
+        "runtimes",
+        "owner",
+        "wanted"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "runtimes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/runtime"
+          }
+        },
+        "owner": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "wanted": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "truthy": {
+      "not": {
+        "enum": [
+          null,
+          false,
+          0,
+          "",
+          [],
+          {}
+        ]
+      }
+    },
+    "mcpServer": {
+      "$ref": "#/$defs/commonEntry",
+      "unevaluatedProperties": false,
+      "properties": {
+        "command": true,
+        "args": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "cwd": true,
+        "url": true,
+        "transport": true,
+        "hosted": {
+          "type": "boolean"
+        }
+      },
+      "if": {
+        "required": [
+          "hosted"
+        ],
+        "properties": {
+          "hosted": {
+            "const": true
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "name": {
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "command"
+            ],
+            "properties": {
+              "command": {
+                "$ref": "#/$defs/truthy"
+              }
+            }
+          },
+          {
+            "required": [
+              "url"
+            ],
+            "properties": {
+              "url": {
+                "$ref": "#/$defs/truthy"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "plugin": {
+      "$ref": "#/$defs/commonEntry",
+      "unevaluatedProperties": false,
+      "properties": {
+        "marketplace": true,
+        "path": true
+      },
+      "if": {
+        "required": [
+          "path"
+        ]
+      },
+      "then": {
+        "properties": {
+          "path": {
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "runtimes": {
+            "const": [
+              "opencode"
+            ]
+          }
+        }
+      },
+      "else": {
+        "required": [
+          "marketplace"
+        ],
+        "properties": {
+          "marketplace": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        }
+      }
+    },
+    "foreignHook": {
+      "$ref": "#/$defs/commonEntry",
+      "unevaluatedProperties": false,
+      "required": [
+        "match"
+      ],
+      "properties": {
+        "match": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "registration": {
+          "description": "Runtime to the captured file an adapter renders, relative to the source root.",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/runtime"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        }
+      },
+      "if": {
+        "required": [
+          "wanted"
+        ],
+        "properties": {
+          "wanted": {
+            "const": true
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "registration"
+          ]
+        }
+      }
+    },
+    "thirdPartySkill": {
+      "$ref": "#/$defs/commonEntry",
+      "unevaluatedProperties": false,
+      "required": [
+        "installer"
+      ],
+      "properties": {
+        "installer": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "skills": {
+          "$ref": "#/$defs/nonEmptyStringList"
+        }
+      }
+    },
+    "dependency": {
+      "$ref": "#/$defs/commonEntry",
+      "unevaluatedProperties": false,
+      "required": [
+        "command",
+        "install",
+        "version"
+      ],
+      "properties": {
+        "command": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "install": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "version": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "version_command": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "platform": {
+          "$ref": "#/$defs/platform"
+        }
+      }
+    }
+  }
+}

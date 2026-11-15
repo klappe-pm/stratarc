@@ -1,0 +1,28 @@
+# Visibility model: public (tracked), local (never ships), machine (caches and tool state).
+
+# local: private work, handoffs and snapshots.
+/local/
+*.local.*
+
+# machine: secrets, caches and editor or OS state.
+.env
+.env.*
+!.env.example
+settings.local.json
+.DS_Store
+__pycache__/
+*.pyc
+node_modules/
+.venv/
+
+# machine: every top-level dot entry is ignored unless allowlisted below.
+/.*
+!/.gitignore
+!/.gitattributes
+!/.github/
+
+# Instruction files are generated from <source-root>/projects/roots/<project>/.
+/AGENTS.md
+/CLAUDE.md
+/CODEX.md
+/GEMINI.md
