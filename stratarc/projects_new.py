@@ -97,7 +97,9 @@ def add_remote(config_dir: pathlib.Path, name: str, slug: str, apply: bool) -> l
         raise NewRefused(f"{path} must hold an object of project name to owner/repo")
     if document.get(name) == slug:
         return []
-    if name in document:
+    # "-" is the no-remote sentinel. A later --new --remote may replace it.
+    # A real owner/repo mapping is never rewritten here.
+    if name in document and document[name] != "-":
         raise NewRefused(f"{REMOTES} already maps {name} to {document[name]}; not changing it to {slug}")
     keys = [k for k in document if not k.startswith("$")]
     document[name] = slug
@@ -434,15 +436,27 @@ def run_registry_check(root: pathlib.Path) -> int:
 
 
 def checkout_path(root: pathlib.Path, name: str, explicit: str | None) -> pathlib.Path:
-    """The checkout --new works on: --checkout, else active/NAME, else NAME in a flat projects root.
+    """The checkout --new works on.
 
-    A projects root is flat when its checkouts sit directly in it, with no status folders; there a checkout at NAME, or one not yet made, is NAME, as reconcile reads it.
+    An explicit --checkout wins. When the canonical registry exists, a
+    project-locations.json binding wins next, then an existing active/NAME
+    checkout, then the flat projects/NAME destination used for a new project.
+    Without a registry, an existing active/NAME checkout wins, then a flat
+    checkout that already has a git directory, then the flat path when the
+    projects root has no status folders, otherwise active/NAME.
     """
     if explicit:
         return pathlib.Path(explicit).expanduser()
-    if load_registry(root) is not None:
-        return paths.projects_dir(root) / name
     base = paths.projects_dir(root)
+    registry = load_registry(root)
+    if registry is not None:
+        bound = load_locations(root, base, registry).get(name)
+        if bound is not None:
+            return bound
+        active = base / "active" / name
+        if active.exists():
+            return active
+        return base / name
     active, flat = base / "active" / name, base / name
     if active.exists():
         return active
@@ -590,8 +604,7 @@ def run_new(
             if checkout is not None:
                 actions += add_location(root, name, where, remote, apply)
             actions += update_control_plane(root, name, status, remote or "-", apply)
-        if remote:
-            actions += add_remote(config_dir, name, remote, apply)
+        actions += add_remote(config_dir, name, remote or "-", apply)
         notes: list[str] = []
         if public:
             notes.append("public repository: no project configuration, row, column or checkout scaffolding")

@@ -171,6 +171,41 @@ def test_canonical_registry_new_project_defaults_flat_and_keeps_other_rows(world
     assert data["projects"][2] == {"id": "bravo", "name": "bravo", "state": "active", "repository": "acme/bravo"}
 
 
+def test_registry_checkout_prefers_a_binding_then_an_existing_active_folder(world):
+    registry = world.root / "projects" / "registry.json"
+    registry.write_text(json.dumps({"schemaVersion": 1, "revision": 1, "projects": [
+        {"id": "alpha", "name": "Alpha", "state": "active", "repository": "acme/alpha"},
+        {"id": "bravo", "name": "Bravo", "state": "active", "repository": None},
+        {"id": "zulu", "name": "Zulu", "state": "inactive", "repository": "acme/zulu"},
+    ]}), encoding="utf-8")
+    active = world.projects / "active" / "bravo"
+    active.mkdir(parents=True)
+    assert projects_new.checkout_path(world.root, "bravo", None) == active
+    bound = world.projects / "nested" / "bravo"
+    bound.mkdir(parents=True)
+    write(world.root / "local" / "project-locations.json", json.dumps({
+        "schemaVersion": 1,
+        "checkouts": [{"projectId": "bravo", "checkoutId": "primary", "path": str(bound.resolve()), "primary": True}],
+    }) + "\n")
+    assert projects_new.checkout_path(world.root, "bravo", None) == bound.resolve()
+    assert projects_new.checkout_path(world.root, "newcomer", None) == world.projects / "newcomer"
+
+
+def test_new_without_remote_records_the_sentinel_and_a_later_remote_replaces_it(bare, capsys):
+    assert bare.run("--new", "bravo") in (0, 1)
+    remotes = json.loads((bare.config / "remotes.json").read_text(encoding="utf-8"))
+    assert remotes["bravo"] == "-"
+    out = capsys.readouterr().out
+    assert "has no remotes.json entry" not in out
+    assert bare.run("--new", "bravo", "--remote", "acme/bravo") in (0, 1)
+    remotes = json.loads((bare.config / "remotes.json").read_text(encoding="utf-8"))
+    assert remotes["bravo"] == "acme/bravo"
+    refused = bare.run("--new", "bravo", "--remote", "acme/other")
+    assert refused == 2
+    remotes = json.loads((bare.config / "remotes.json").read_text(encoding="utf-8"))
+    assert remotes["bravo"] == "acme/bravo"
+
+
 def test_canonical_registry_explicit_checkout_is_bound(world):
     path = world.root / "projects" / "registry.json"
     path.write_text(json.dumps({"schemaVersion": 1, "revision": 1, "projects": []}), encoding="utf-8")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from stratarc.control_plane import ControlPlane, main, set_cell
@@ -38,6 +40,29 @@ NEW_SHAPE = """\
 |---|---|---|---|
 | demo | active | strict | - |
 | old | archived | normal | base |
+"""
+
+LATER_SHORT = """\
+# control-plane
+
+## instruction-file
+
+| option | global | demo |
+|---|---|---|
+| [AGENTS.md](AGENTS.md) | x | x |
+
+## runtimes
+
+| option | global |
+|---|---|
+| [runtime:claude](../../stratarc.toml) | x |
+
+## projects
+
+| project | status |
+|---|---|
+| demo | active |
+| third-party | external |
 """
 
 
@@ -115,6 +140,14 @@ class TestTierColumnParsing:
         assert cp.enabled("global", "AGENTS.md")
         assert cp.enabled("demo", "AGENTS.md")
 
+    def test_a_later_shorter_option_table_keeps_earlier_project_columns(self, load):
+        cp = load(LATER_SHORT)
+        assert cp.columns == ["global", "demo"]
+        assert cp.projects() == ["demo"]
+        assert cp.enabled("demo", "AGENTS.md")
+        assert cp.enabled("global", "runtime:claude")
+        assert not cp.enabled("demo", "runtime:claude")
+
 
 class TestQueries:
     def test_enabled_ids_strips_the_prefix(self, load):
@@ -128,6 +161,24 @@ class TestQueries:
         assert cp.tier("demo") == "strict"
         assert cp.template("demo") == "base"  # "-" reads as empty
         assert cp.status("missing") == "unlisted"
+        assert cp.active_projects() == ["demo"]
+
+    def test_external_rows_stay_out_of_active_projects_when_the_registry_says_active(self, tmp_path):
+        (tmp_path / "stratarc.toml").write_text("[layout]\n", encoding="utf-8")
+        (tmp_path / "projects").mkdir()
+        (tmp_path / "projects" / "registry.json").write_text(json.dumps({
+            "schemaVersion": 1,
+            "revision": 1,
+            "projects": [
+                {"id": "demo", "name": "Demo", "state": "active", "repository": None},
+                {"id": "third-party", "name": "Third Party", "state": "active", "repository": None},
+            ],
+        }), encoding="utf-8")
+        plane = tmp_path / "control-plane.md"
+        plane.write_text(LATER_SHORT, encoding="utf-8")
+        cp = ControlPlane.load(plane)
+        assert cp.status("third-party") == "active"
+        assert cp.field("third-party", "status") == "external"
         assert cp.active_projects() == ["demo"]
 
     def test_option_labels_may_be_markdown_links(self, load):
