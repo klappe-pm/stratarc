@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -400,8 +401,123 @@ _CODEX_CORE_ENV_VARS = (
 )
 
 
+# Codex 0.169.0 documents `include_only` and `exclude` as legacy and offers
+# `[shell_environment_policy.filters]`, a map of case-insensitive variable
+# patterns to "include" or "exclude". It refuses a config that mixes the two
+# forms ("cannot mix `filters` with legacy `exclude` or `include_only`").
+# Verified against the 0.169.0 parser with `codex doctor`: the map form loads
+# and an array form (`include = [...]`) does not. Whether a named variable
+# then reaches a shell command was not observable without a model call, so the
+# release check in `docs/` still asks for a presence test inside a session.
+_CODEX_ENV_FILTERS_MIN_VERSION = (0, 169, 0)
+_ENV_FILTERS_TABLE = "shell_environment_policy.filters"
+_FILTER_ENTRY = re.compile(
+    r'(?m)^(?:"([^"]+)"|\'([^\']+)\'|([A-Za-z0-9_-]+))\s*=\s*["\'](include|exclude)["\']'
+)
+
+
+def _installed_codex_version() -> tuple[int, ...] | None:
+    """Version of the `codex` on PATH, or None when it is absent or unreadable."""
+    try:
+        result = subprocess.run(
+            ["codex", "--version"], capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", result.stdout)
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def _env_filters_supported() -> bool:
+    version = _installed_codex_version()
+    return version is not None and version >= _CODEX_ENV_FILTERS_MIN_VERSION
+
+
+def _existing_filter_entries(toml: str) -> dict[str, str]:
+    """Entries of `[shell_environment_policy.filters]`, as name to action."""
+    pattern = rf"(?ms)^\[{re.escape(_ENV_FILTERS_TABLE)}\]\n(.*?)(?=^\[|\Z)"
+    match = re.search(pattern, toml)
+    if not match:
+        return {}
+    return {
+        next(g for g in groups[:3] if g): groups[3]
+        for groups in _FILTER_ENTRY.findall(match.group(1))
+    }
+
+
+def _casefold_unique(names: list[str]) -> list[str]:
+    """Drop names that differ only by case, keeping the first.
+
+    `filters` patterns are case-insensitive, and Codex 0.169 refuses to load a
+    config whose table holds two keys that collide that way (verified with
+    `codex doctor` on `ALL_PROXY` beside `all_proxy`). One pattern already
+    matches both spellings.
+    """
+    seen: dict[str, str] = {}
+    for name in names:
+        seen.setdefault(name.casefold(), name)
+    return list(seen.values())
+
+
+def _merge_shell_environment_filters(toml: str, names: list[str]) -> str:
+    """Render the passthrough as `filters` entries for Codex 0.169 and later.
+
+    An include entry makes an allowlist, so this keeps `inherit = "all"` and
+    names every variable Codex's own "core" mode supplies alongside the
+    requested ones, exactly as the legacy path does. Legacy `include_only` and
+    `exclude` arrays are migrated into the table and removed, because Codex
+    refuses a config that carries both. `ignore_default_excludes = true` keeps
+    variables whose names contain KEY, SECRET or TOKEN out of the automatic
+    secret-name step; the allowlist still decides what is passed.
+    """
+    table = "shell_environment_policy"
+    entries = _existing_filter_entries(toml)
+    toml = re.sub(
+        rf"(?ms)^\n?\[{re.escape(_ENV_FILTERS_TABLE)}\]\n.*?(?=^\[|\Z)", "", toml
+    )
+    pattern = rf"(?ms)^(\[{re.escape(table)}\]\n)(.*?)(?=^\[|\Z)"
+    match = re.search(pattern, toml)
+    body = match.group(2) if match else ""
+    excludes = _casefold_unique(
+        _list_top_level(body, "exclude")
+        + [name for name, action in entries.items() if action == "exclude"]
+    )
+    excluded = {name.casefold() for name in excludes}
+    includes = [
+        name
+        for name in _casefold_unique(
+            list(_CODEX_CORE_ENV_VARS)
+            + _existing_table_keys(toml, f"{table}.set")
+            + _list_top_level(body, "include_only")
+            + [name for name, action in entries.items() if action == "include"]
+            + list(names)
+        )
+        if name.casefold() not in excluded
+    ]
+    # `set_top_level` matches only unindented keys, so a hand-written, indented
+    # copy would survive beside the one rendered here and duplicate the key.
+    body = re.sub(r"(?m)^[ \t]+ignore_default_excludes[ \t]*=.*\n?", "", body)
+    body = set_top_level(body, "inherit", json.dumps("all"))
+    body = set_top_level(body, "ignore_default_excludes", "true")
+    for legacy in ("include_only", "exclude", "include"):
+        body = set_top_level(body, legacy, None)
+    lines = [f"{json.dumps(name)} = \"include\"" for name in includes]
+    lines += [f"{json.dumps(name)} = \"exclude\"" for name in excludes]
+    block = f"\n[{_ENV_FILTERS_TABLE}]\n" + "\n".join(lines) + "\n"
+    if not match:
+        header = "" if not toml or toml.endswith("\n") else "\n"
+        return toml + header + f"\n[{table}]\n" + body.rstrip("\n") + "\n" + block
+    rest = toml[match.end() :]
+    if rest.strip():
+        block += "\n"
+    return toml[: match.start()] + match.group(1) + body.rstrip("\n") + "\n" + block + rest
+
+
 def _merge_shell_environment_passthrough(toml: str, names: list[str]) -> str:
     """Ensure `[shell_environment_policy]` passes the named variables through.
+
+    Codex 0.169 and later get `filters` entries; older Codex gets the legacy
+    `include_only` array described below.
 
     `include_only` replaces whatever `inherit` would have provided rather
     than adding to it, so reaching a var declared here requires `inherit =
@@ -414,6 +530,8 @@ def _merge_shell_environment_passthrough(toml: str, names: list[str]) -> str:
     stale one left by an earlier, since-corrected version of this function
     does not linger.
     """
+    if _env_filters_supported():
+        return _merge_shell_environment_filters(toml, names)
     table = "shell_environment_policy"
     pattern = rf"(?ms)^(\[{re.escape(table)}\]\n)(.*?)(?=^\[|\Z)"
     match = re.search(pattern, toml)
