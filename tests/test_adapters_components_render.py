@@ -129,11 +129,10 @@ class SelectionTests(StageCase):
         self.assertIn("mcp server hosted is not rendered: a hosted connector", text)
         self.assertIn("mcp server secret is not rendered: env A, B is a secret:// reference", text)
 
-    def test_claude_user_scope_is_named_but_a_project_scope_renders(self):
+    def test_claude_user_and_project_scopes_select_engine_owned_servers(self):
         self.write_stage({"mcp_servers": [server("keep", command="run")]})
         rendered, notes = c.selected_servers(self.stage, "claude")
-        self.assertEqual(rendered, {})
-        self.assertIn("mcp server keep is not rendered at user scope", notes[0])
+        self.assertEqual((list(rendered), notes), (["keep"], []))
         rendered, notes = c.selected_servers(self.stage, "claude", project=True)
         self.assertEqual((list(rendered), notes), (["keep"], []))
 

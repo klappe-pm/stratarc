@@ -199,7 +199,7 @@ Ends the command with status 5 (unavailable).
 
 Problem: An adapter is older than the installed runtime: {detail}
 
-Recovery: Update the adapter with `stratarc adapter register`; the deploy continues.
+Recovery: Upgrade Stratarc or install an adapter verified against this runtime; the deploy continues. Registering unchanged metadata does not verify compatibility.
 
 ### `msg-1116`
 

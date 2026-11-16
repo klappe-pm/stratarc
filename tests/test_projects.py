@@ -1163,6 +1163,22 @@ def test_an_identical_unrecorded_skill_is_not_claimed_or_pruned(world, skills):
 
 
 @pytest.mark.parametrize("relative", [SKILL, AGENTS_SKILL])
+def test_skill_edits_that_now_match_source_refresh_the_delivery_hash(world, skills, relative, capsys):
+    sync_skills(world)
+    edited = skills / relative
+    edited.write_text("accepted project edit\n")
+    (source_skill(world) / "SKILL.md").write_bytes(edited.read_bytes())
+    capsys.readouterr()
+    assert verify_skills(world)[1] == []
+    sync_skills(world)
+    assert "locally edited" not in capsys.readouterr().err
+    assert manifest_of(skills)["hashes"][relative.as_posix()] == "sha256-" + projects._sha256(edited)
+    (source_skill(world) / "SKILL.md").write_text("next source change\n")
+    sync_skills(world)
+    assert edited.read_text() == "next source change\n"
+
+
+@pytest.mark.parametrize("relative", [SKILL, AGENTS_SKILL])
 def test_selected_skill_keeps_project_edits_and_the_original_delivery_hash(world, skills, relative):
     """A selected skill must not overwrite an edited delivery or lose its protection on a later sync."""
     sync_skills(world)
@@ -1923,6 +1939,17 @@ def test_a_delivered_path_that_is_not_gitignored_is_silent(tmp_path, capsys):
     write(checkout / ".claude" / "hooks" / "guard.sh", "#!/bin/sh\n")
     projects._warn_on_gitignored_delivered_paths("proj", checkout, {".claude/hooks/guard.sh": "irrelevant"})
     assert capsys.readouterr().err == ""
+
+
+def test_ignored_generated_files_are_summarized_without_changing_ignore_policy(tmp_path, capsys):
+    checkout = ignored_checkout(tmp_path, ".claude/\n")
+    delivered = {f".claude/skills/example/file-{i}.md": "irrelevant" for i in range(50)}
+    projects._warn_on_gitignored_delivered_paths("proj", checkout, delivered)
+    err = capsys.readouterr().err
+    assert len(err.splitlines()) == 1
+    assert "50 generated files" in err
+    assert "stratarc sync" in err
+    assert (checkout / ".gitignore").read_text() == ".claude/\n"
 
 
 def test_a_delivered_path_outside_the_checked_trees_is_not_checked(tmp_path, capsys):

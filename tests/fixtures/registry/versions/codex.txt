@@ -1,2 +1,2 @@
 Credentials are resolved from the environment.
-codex-cli 0.162.0
+codex-cli 0.169.0

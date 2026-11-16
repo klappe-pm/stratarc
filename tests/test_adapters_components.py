@@ -261,18 +261,18 @@ class Rendering(unittest.TestCase):
 
     # ----- what a runtime cannot take is named -----
 
-    def test_claude_and_cursor_write_no_mcp_configuration_and_say_why(self):
+    def test_cursor_renders_mcp_configuration_and_claude_uses_the_sync_companion(self):
         self.select(server("acme"))
         claude = self.home / ".claude"
         cursor = self.home / ".cursor"
         adapter("claude").sync(self.stage, claude)
         adapter("cursor").sync(self.stage, cursor)
         self.assertFalse((self.home / ".claude.json").exists())
-        self.assertFalse((cursor / "mcp.json").exists())
+        self.assertEqual(json.loads((cursor / "mcp.json").read_text())["mcpServers"]["acme"]["command"], "npx")
         claude_notes = components_render.notes(self.stage, "claude")
         cursor_notes = components_render.notes(self.stage, "cursor")
-        self.assertTrue(any("acme" in n and "claude mcp add" in n for n in claude_notes), claude_notes)
-        self.assertTrue(any("acme" in n and "live" in n for n in cursor_notes), cursor_notes)
+        self.assertEqual(claude_notes, [])
+        self.assertEqual(cursor_notes, [])
 
     def test_a_server_with_a_secret_reference_is_named_and_never_written(self):
         target = self.home / ".codex"

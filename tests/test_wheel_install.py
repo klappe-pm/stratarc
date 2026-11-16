@@ -60,7 +60,7 @@ def test_wheel_install_scaffolds_template(tmp_path: Path):
 
     doctor = json.loads(_run([stratarc, "--root", str(target), "--json", "doctor"], cwd=tmp_path, env=env).stdout)
     assert doctor["ok"] is True
-    assert doctor["data"]["adapters"] == 5
+    assert doctor["data"]["adapters"] == 6
     assert doctor["data"]["source_root"]["path"] == str(target.resolve())
 
     # A runtime of the user's own works from the installed wheel: `adapter new` writes the

@@ -48,7 +48,7 @@ from ._inventory import strip_jsonc
 from stratarc.paths import engine_name
 
 STAGED = "components.json"
-RENDERED_RUNTIMES = ("codex", "gemini", "opencode")
+RENDERED_RUNTIMES = ("codex", "gemini", "opencode", "cursor")
 
 
 def ledger_name(root: Optional[Path] = None) -> str:
@@ -71,14 +71,6 @@ class RenderRefused(RuntimeError):
 
 
 _NOT_RENDERED = {
-    "claude": (
-        "is not rendered at user scope: Claude Code keeps user MCP servers in ~/.claude.json, "
-        "outside ~/.claude, so add it there or with `claude mcp add`"
-    ),
-    "cursor": (
-        "is not rendered: Cursor's MCP configuration joins after it is confirmed on a live install "
-        "(pending the component manifest's Cursor slice)"
-    ),
     "agy": (
         "is not rendered: Antigravity CLI's MCP configuration joins after it is confirmed on a live install"
     ),
@@ -371,13 +363,21 @@ def notes(source: Path, runtime: str) -> List[str]:
 # ----- the ledger of what an adapter rendered -----
 
 
-def _read_ledger(target: Path, source: Optional[Path] = None) -> List[str]:
+def _read_ledger(target: Path, source: Optional[Path] = None, *, strict: bool = False) -> List[str]:
     path = target / ledger_name(source)
+    if strict and path.is_symlink():
+        raise RenderRefused(f"{path.name} is a symlink; MCP ownership was left unchanged")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
     except (OSError, ValueError):
+        if strict:
+            raise RenderRefused(f"{path.name} cannot be read as an MCP ownership ledger; left unchanged") from None
         return []
     names = data.get("mcp_servers") if isinstance(data, dict) else None
+    if strict and (not isinstance(names, list) or not all(isinstance(n, str) for n in names)):
+        raise RenderRefused(f"{path.name} is not a valid MCP ownership ledger; left unchanged")
     return [n for n in names if isinstance(n, str)] if isinstance(names, list) else []
 
 
@@ -408,13 +408,25 @@ def _merge_mapping(existing: Any, desired: Dict[str, Any], previous: List[str]) 
 
 def _render_json(
     path: Path, key: str, desired: Dict[str, Any], target: Path, dry_run: bool, *, jsonc: bool = False,
-    source: Optional[Path] = None,
+    source: Optional[Path] = None, private: bool = False,
 ) -> List[str]:
-    previous = _read_ledger(target, source)
+    previous = _read_ledger(target, source, strict=True)
     if not desired and not previous:
         return []
+    if path.is_symlink() or (target / ledger_name(source)).is_symlink():
+        raise RenderRefused(f"{path.name} or its MCP ledger is a symlink; left unchanged")
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    document = json.loads(strip_jsonc(text) if jsonc else text) if text.strip() else {}
+    try:
+        document = json.loads(strip_jsonc(text) if jsonc else text) if text.strip() else {}
+    except ValueError:
+        raise RenderRefused(f"{path.name} is not valid JSON; left unchanged") from None
+    if not isinstance(document, dict) or (key in document and not isinstance(document[key], dict)):
+        raise RenderRefused(f"{path.name} must contain an object with an object-valued {key}; left unchanged")
+    existing = document.get(key) or {}
+    collisions = sorted(name for name in desired if name in existing and name not in previous and existing[name] != desired[name])
+    if collisions:
+        raise RenderRefused(f"{path.name} has unowned MCP server collisions ({', '.join(collisions)}); existing definitions were left unchanged")
+    managed = [name for name in desired if name in previous or name not in existing]
     merged = _merge_mapping(document.get(key), desired, previous)
     changed = merged != (document.get(key) or {})
     if changed:
@@ -425,8 +437,14 @@ def _render_json(
             updated.pop(key, None)
         if not dry_run:
             target.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(updated, indent=2) + "\n", encoding="utf-8")
-    _write_ledger(target, list(desired), dry_run, source)
+            content = json.dumps(updated, indent=2) + "\n"
+            if private:
+                from stratarc.home_layout import safe_write
+
+                safe_write(path, content, manage_parent=False)
+            else:
+                path.write_text(content, encoding="utf-8")
+    _write_ledger(target, managed, dry_run, source)
     return [f"render components.json mcp servers into {path.name}"] if changed else []
 
 
@@ -619,7 +637,13 @@ def render_opencode(source: Path, target: Path, dry_run: bool) -> List[str]:
     return _render_json(target / "opencode.jsonc", "mcp", desired, target, dry_run, jsonc=True, source=source)
 
 
+def render_cursor(source: Path, target: Path, dry_run: bool) -> List[str]:
+    servers, _notes = selected_servers(source, "cursor")
+    desired = {name: {key: value for key, value in neutral_server(entry).items() if key != "transport"} for name, entry in servers.items()}
+    return _render_json(target / "mcp.json", "mcpServers", desired, target, dry_run, source=source)
+
+
 def render(runtime: str, source: Path, target: Path, dry_run: bool) -> List[str]:
     """The actions rendering this runtime's selected MCP servers takes."""
-    renderer: Optional[Any] = {"codex": render_codex, "gemini": render_gemini, "opencode": render_opencode}.get(runtime)
+    renderer: Optional[Any] = {"codex": render_codex, "gemini": render_gemini, "opencode": render_opencode, "cursor": render_cursor}.get(runtime)
     return renderer(source, target, dry_run) if renderer else []

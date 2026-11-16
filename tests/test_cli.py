@@ -177,6 +177,32 @@ def test_setup_without_a_terminal_is_refused(capsys, monkeypatch):
     assert capsys.readouterr().err.startswith("error msg-1012")
 
 
+def test_selecting_an_existing_root_remembers_it_for_the_next_command(monkeypatch, capsys, tmp_path, stratarc_home):
+    from stratarc import paths, setup
+
+    root = tmp_path / "source with spaces"
+    setup.scaffold(root)
+    monkeypatch.chdir(stratarc_home)
+    monkeypatch.delenv("STRATARC_SOURCE", raising=False)
+    monkeypatch.setattr(cli, "_interactive", lambda: True)
+    assert main(["--root", str(root)]) == 0
+    assert paths.remembered_source() == root.resolve()
+    assert main(["validate"]) == 0
+    assert "msg-1009" not in capsys.readouterr().err
+
+
+def test_selecting_an_invalid_root_does_not_remember_it(monkeypatch, tmp_path, stratarc_home):
+    from stratarc import paths
+
+    root = tmp_path / "invalid"
+    root.mkdir()
+    (root / "stratarc.toml").write_text("[broken", encoding="utf-8")
+    monkeypatch.delenv("STRATARC_SOURCE", raising=False)
+    monkeypatch.setattr(cli, "_interactive", lambda: True)
+    assert main(["--root", str(root)]) == 2
+    assert paths.remembered_source() is None
+
+
 def test_drift_repo_mode_runs_in_a_project_checkout_with_no_source_root(monkeypatch, capsys, tmp_path, stratarc_home):
     # Project CI runs `stratarc drift --repo` in a plain checkout: there is no stratarc.toml anywhere above it.
     project = tmp_path / "project"

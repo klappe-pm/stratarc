@@ -19,6 +19,7 @@ from pathlib import Path
 
 from ._common import OwnedDir, repoint_command
 from ._foreign import render as render_foreign
+from ._components import render as render_components
 from ._inventory import Item, mcp_from_json_file, unreadable
 
 
@@ -230,6 +231,7 @@ def sync(source: Path, target: Path, dry_run: bool = False) -> list[str]:
     # merge sees them as foreign entries and places them where it places every
     # other one, in this same pass.
     actions.extend(render_foreign("cursor", source, target, dry_run))
+    actions.extend(render_components("cursor", source, target, dry_run))
     source_config = source / "hooks" / "hooks.json"
     if not source_config.exists():
         return actions
