@@ -5,11 +5,13 @@ Uses temp dirs only -- never writes to ~/.codex.
 
 import json
 import os
+import shutil
 import tempfile
 import textwrap
 import tomllib
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -354,6 +356,13 @@ class TestAgentTranslation(unittest.TestCase):
 
 
 class TestCanonicalPermissions(unittest.TestCase):
+    def setUp(self):
+        # These cases pin the legacy `include_only` rendering, so they must not
+        # depend on whichever Codex is installed on the machine running them.
+        patcher = mock.patch.object(codex, "_installed_codex_version", return_value=(0, 155, 1))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     """Canonical permissions render native Codex settings and rules."""
 
     def test_explicit_approval_policy_reaches_global_and_project_configs(self):
@@ -768,6 +777,110 @@ class TestCanonicalPermissions(unittest.TestCase):
             )
             self.assertEqual(config["tui"]["notification_condition"], "always")
             self.assertEqual(config["model"], "x")
+
+
+class TestShellEnvironmentFilters(unittest.TestCase):
+    """Codex 0.169 and later take `filters` entries, never the legacy arrays."""
+
+    def _sync(self, existing: str, version=(0, 169, 0)) -> tuple[str, list[str], Path]:
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        source = Path(root) / "source"
+        target = Path(root) / "target"
+        source.mkdir()
+        target.mkdir()
+        policy = {
+            "schemaVersion": 1,
+            "allow": [],
+            "deny": [],
+            "ask": [],
+            "codexShellEnvironment": {"passthrough": ["GH_TOKEN"]},
+        }
+        (source / "permissions.json").write_text(json.dumps(policy))
+        (target / "config.toml").write_text(existing)
+        with mock.patch.object(codex, "_installed_codex_version", return_value=version):
+            codex.sync(source, target)
+            second = codex.sync(source, target)
+        return (target / "config.toml").read_text(), second, target
+
+    def test_renders_include_entries_and_no_legacy_arrays(self):
+        text, second, _ = self._sync("")
+        policy = tomllib.loads(text)["shell_environment_policy"]
+        self.assertEqual(policy["inherit"], "all")
+        self.assertIs(policy["ignore_default_excludes"], True)
+        self.assertNotIn("include_only", policy)
+        self.assertNotIn("exclude", policy)
+        self.assertEqual(policy["filters"]["GH_TOKEN"], "include")
+        self.assertEqual(policy["filters"]["PATH"], "include")
+        self.assertEqual(policy["filters"]["HOME"], "include")
+        self.assertEqual(second, [])
+
+    def test_migrates_legacy_arrays_and_keeps_set_table(self):
+        existing = (
+            '[shell_environment_policy]\ninherit = "core"\n'
+            'include_only = ["ALREADY_THERE"]\nexclude = ["SECRET_ONE"]\n\n'
+            '[shell_environment_policy.set]\nEXISTING_VAR = "1"\n\n'
+            '[tui]\nnotification_condition = "always"\n'
+        )
+        text, second, _ = self._sync(existing)
+        config = tomllib.loads(text)
+        policy = config["shell_environment_policy"]
+        self.assertNotIn("include_only", policy)
+        self.assertNotIn("exclude", policy)
+        self.assertEqual(policy["filters"]["ALREADY_THERE"], "include")
+        self.assertEqual(policy["filters"]["EXISTING_VAR"], "include")
+        self.assertEqual(policy["filters"]["GH_TOKEN"], "include")
+        self.assertEqual(policy["filters"]["SECRET_ONE"], "exclude")
+        self.assertEqual(policy["set"]["EXISTING_VAR"], "1")
+        self.assertEqual(config["tui"]["notification_condition"], "always")
+        self.assertEqual(second, [])
+
+    def test_names_that_differ_only_by_case_are_rendered_once(self):
+        # Codex 0.169 refuses to load a filters table holding both spellings.
+        text, _, _ = self._sync("")
+        filters = tomllib.loads(text)["shell_environment_policy"]["filters"]
+        folded = [name.casefold() for name in filters]
+        self.assertEqual(len(folded), len(set(folded)))
+        self.assertTrue({"all_proxy", "http_proxy", "https_proxy"} <= set(folded))
+
+    def test_a_hand_written_indented_key_is_not_duplicated(self):
+        existing = (
+            '[shell_environment_policy]\n  ignore_default_excludes = true\n'
+            'inherit = "all"\ninclude_only = ["PATH"]\n'
+        )
+        text, second, _ = self._sync(existing)
+        self.assertEqual(text.count("ignore_default_excludes"), 1)
+        # tomllib rejects a duplicate key, so a clean parse proves there is one.
+        self.assertIs(tomllib.loads(text)["shell_environment_policy"]["ignore_default_excludes"], True)
+        self.assertEqual(second, [])
+
+    def test_an_excluded_name_is_not_also_included(self):
+        existing = (
+            '[shell_environment_policy]\nexclude = ["GH_TOKEN"]\n'
+        )
+        text, _, _ = self._sync(existing)
+        filters = tomllib.loads(text)["shell_environment_policy"]["filters"]
+        self.assertEqual(filters["GH_TOKEN"], "exclude")
+
+    def test_older_codex_keeps_the_legacy_include_only_array(self):
+        text, _, _ = self._sync("", version=(0, 155, 1))
+        policy = tomllib.loads(text)["shell_environment_policy"]
+        self.assertIn("GH_TOKEN", policy["include_only"])
+        self.assertNotIn("filters", policy)
+
+    def test_missing_codex_keeps_the_legacy_include_only_array(self):
+        text, _, _ = self._sync("", version=None)
+        policy = tomllib.loads(text)["shell_environment_policy"]
+        self.assertIn("GH_TOKEN", policy["include_only"])
+        self.assertNotIn("filters", policy)
+
+    def test_a_filters_table_from_an_earlier_run_is_replaced_not_duplicated(self):
+        first, _, target = self._sync("")
+        with mock.patch.object(codex, "_installed_codex_version", return_value=(0, 169, 0)):
+            codex.sync(target.parent / "source", target)
+        text = (target / "config.toml").read_text()
+        self.assertEqual(text.count("[shell_environment_policy.filters]"), 1)
+        self.assertEqual(text, first)
 
 
 class TestSkillSurvival(unittest.TestCase):
