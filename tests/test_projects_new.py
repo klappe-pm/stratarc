@@ -169,6 +169,10 @@ def test_canonical_registry_new_project_defaults_flat_and_keeps_other_rows(world
         {"id": "zulu", "name": "Zulu", "state": "inactive", "repository": "acme/zulu"},
     ]
     assert data["projects"][2] == {"id": "bravo", "name": "bravo", "state": "active", "repository": "acme/bravo"}
+    locations = json.loads((world.root / "local" / "project-locations.json").read_text(encoding="utf-8"))
+    assert locations["checkouts"] == [{
+        "projectId": "bravo", "checkoutId": "primary", "path": str((world.projects / "bravo").resolve()), "primary": True,
+    }]
 
 
 def test_registry_checkout_prefers_a_binding_then_an_existing_active_folder(world):
@@ -188,7 +192,7 @@ def test_registry_checkout_prefers_a_binding_then_an_existing_active_folder(worl
         "checkouts": [{"projectId": "bravo", "checkoutId": "primary", "path": str(bound.resolve()), "primary": True}],
     }) + "\n")
     assert projects_new.checkout_path(world.root, "bravo", None) == bound.resolve()
-    assert projects_new.checkout_path(world.root, "newcomer", None) == world.projects / "newcomer"
+    assert projects_new.checkout_path(world.root, "newcomer", None) == world.projects / "active" / "newcomer"
 
 
 def test_new_without_remote_records_the_sentinel_and_a_later_remote_replaces_it(bare, capsys):

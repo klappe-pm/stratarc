@@ -439,8 +439,8 @@ def checkout_path(root: pathlib.Path, name: str, explicit: str | None) -> pathli
     """The checkout --new works on.
 
     An explicit --checkout wins. When the canonical registry exists, a
-    project-locations.json binding wins next, then an existing active/NAME
-    checkout, then the flat projects/NAME destination used for a new project.
+    project-locations.json binding wins next. A new project then lands in
+    active/NAME when that status folder exists, and otherwise at projects/NAME.
     Without a registry, an existing active/NAME checkout wins, then a flat
     checkout that already has a git directory, then the flat path when the
     projects root has no status folders, otherwise active/NAME.
@@ -453,9 +453,9 @@ def checkout_path(root: pathlib.Path, name: str, explicit: str | None) -> pathli
         bound = load_locations(root, base, registry).get(name)
         if bound is not None:
             return bound
-        active = base / "active" / name
-        if active.exists():
-            return active
+        active_root = base / "active"
+        if active_root.is_dir():
+            return active_root / name
         return base / name
     active, flat = base / "active" / name, base / name
     if active.exists():
@@ -590,18 +590,19 @@ def run_new(
         if registry is not None:
             if not where.is_absolute() or any(part.is_symlink() for part in [where, *where.parents]) or not where.resolve().is_relative_to(base.resolve()):
                 raise NewRefused("checkout path must be a non-symlink path inside the configured projects root")
-            if checkout is not None:
-                add_location(root, name, where, remote, False)
+            add_location(root, name, where, remote, False)
             status = registry[name].state if name in registry else "active"
         else:
             status = project_status(where, base)
         if public:
             actions += add_public(config_dir, name, apply)
             actions += add_registry_project(root, name, remote, apply)
+            if registry is not None:
+                actions += add_location(root, name, where, remote, apply)
         else:
             actions += copy_root(root, name, apply, workflows)
             actions += add_registry_project(root, name, remote, apply)
-            if checkout is not None:
+            if registry is not None:
                 actions += add_location(root, name, where, remote, apply)
             actions += update_control_plane(root, name, status, remote or "-", apply)
         actions += add_remote(config_dir, name, remote or "-", apply)
