@@ -165,6 +165,10 @@ class ControlPlane:
         mode: str | None = None
         man_header: list[str] = []
         has_tier = False
+        # Each option table is parsed with its own header. cp.columns keeps the
+        # first-seen union so a later table that only names global does not
+        # drop project columns parsed from an earlier table.
+        table_columns: list[str] = []
         for raw in path.read_text(encoding="utf-8").splitlines():
             if not raw.lstrip().startswith("|"):
                 mode = None
@@ -176,7 +180,10 @@ class ControlPlane:
             if head == "option":
                 mode = "options"
                 has_tier = len(cells) > 1 and cells[1].strip().lower() == "tier"
-                cp.columns = cells[2:] if has_tier else cells[1:]
+                table_columns = cells[2:] if has_tier else cells[1:]
+                for column in table_columns:
+                    if column not in cp.columns:
+                        cp.columns.append(column)
                 continue
             if head == "project":
                 mode = "manifest"
@@ -205,7 +212,7 @@ class ControlPlane:
                 if tier_val and tier_val != "-":
                     cp.rule_tiers[key] = tier_val
             row = {}
-            for i, col in enumerate(cp.columns, start=offset):
+            for i, col in enumerate(table_columns, start=offset):
                 val = cells[i] if i < len(cells) else ""
                 row[col] = val.lower() == "x"
             cp._grid[key] = row
@@ -261,7 +268,10 @@ class ControlPlane:
         return self.status(project) == "active"
 
     def active_projects(self) -> list[str]:
-        return [p for p in self.manifest if self.is_active(p)]
+        # `external` is a manifest delivery exclusion, not a registry state.
+        # status() reports the registry state when one exists, so a registry-active
+        # external row would otherwise be treated as a project to ingest.
+        return [p for p in self.manifest if self.field(p, "status") != "external" and self.is_active(p)]
 
     def find_checkout(
         self, project: str, root: pathlib.Path | None = None
