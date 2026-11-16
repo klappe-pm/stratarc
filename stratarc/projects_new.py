@@ -347,6 +347,8 @@ def registry_problems(root: pathlib.Path) -> list[str]:
     registry = load_registry(root)
     remotes = read_remotes(config_dir)
     public = set(read_public(config_dir))
+    remote_values = {v.casefold() for v in remotes.values() if v and v != "-"}
+    registry_repos = {e.repository.casefold() for e in (registry or {}).values() if e.repository}
     folders = (
         {p.name for p in config_dir.iterdir() if p.is_dir() and not p.name.startswith((".", "_"))}
         if config_dir.is_dir()
@@ -354,14 +356,19 @@ def registry_problems(root: pathlib.Path) -> list[str]:
     )
     problems: list[str] = []
     if registry is not None:
+        # The canonical lifecycle registry also lists the source repository,
+        # archived projects whose roots were retired, and rootless projects that
+        # have not opted into private configuration delivery. Only a project
+        # with a root folder must appear in control-plane.md, and any row in
+        # control-plane.md must agree with the registry.
         for name, entry in registry.items():
             if name in public or (entry.repository is not None and entry.repository in public):
                 continue
-            if name not in cp.manifest:
-                problems.append(f"{name}: in the project registry but not the control plane")
-            elif cp.field(name, "status") != entry.state:
+            if name in cp.manifest and cp.field(name, "status") != entry.state:
                 problems.append(f"{name}: control plane status differs from project registry")
-        for name in cp.manifest.keys() - registry.keys():
+            elif name not in cp.manifest and name in folders:
+                problems.append(f"{name}: in the project registry with a root folder but not the control plane")
+        for name in sorted(cp.manifest.keys() - registry.keys(), key=str.casefold):
             problems.append(f"{name}: in the control plane but not the project registry")
     for name in sorted(cp.manifest, key=str.casefold):
         if name in public:
@@ -372,7 +379,10 @@ def registry_problems(root: pathlib.Path) -> list[str]:
         if name not in remotes:
             problems.append(f"{name}: in the control plane but has no {REMOTES} entry")
     for name in sorted(public, key=str.casefold):
-        if name not in remotes:
+        if "/" in name:
+            if name.casefold() not in remote_values and name.casefold() not in registry_repos:
+                problems.append(f"{name}: in {PUBLIC_TARGETS} but has no {REMOTES} entry")
+        elif name not in remotes:
             problems.append(f"{name}: in {PUBLIC_TARGETS} but has no {REMOTES} entry")
     for name in sorted(folders - set(cp.manifest), key=str.casefold):
         problems.append(f"{name}: has a root folder but is not in the control plane")

@@ -271,6 +271,10 @@ def _back_up_planned(adapter, name: str, stage: pathlib.Path, target: pathlib.Pa
     for rel in sorted(named | owned):
         _remember(target / rel, state)
     _remember(target / stamp_name(root), state)
+    from stratarc import companions
+
+    for path in companions.files(name, stage, target):
+        _remember(path, state)
     if scratch is None:
         state.unplaced.extend(f"{name}: {' '.join(a.split())[:120]}" for a in unplaced)
 
@@ -1609,6 +1613,16 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
                     account.add("runtime", name, "failed", f"{short(unwritable)} is not writable", target)
                     unsupported = True
                     continue
+            from stratarc import companions
+            from stratarc.adapters._components import RenderRefused
+
+            try:
+                companions.preflight(name, stage, target, read_only=read_only)
+            except (RenderRefused, OSError) as error:
+                print(f"sync: {name}: {error}", file=sys.stderr)
+                account.add("runtime", name, "failed", "companion configuration refused", target)
+                unsupported = True
+                continue
             ready.append((name, adapter, target))
 
         if not read_only and (gated or unsupported):
@@ -1628,6 +1642,7 @@ def _run(args: argparse.Namespace, root: pathlib.Path, state: DeployState) -> in
                 if state.rollback and not read_only:
                     _back_up_planned(adapter, name, stage, target, root, state)
                 actions = adapter.sync(stage, target, dry_run=read_only)
+                actions.extend(companions.sync(name, stage, target, dry_run=read_only))
             except (RenderRefused, OSError) as refused:
                 # A failure only the write itself can find (a runtime file
                 # the component renderer cannot rewrite safely, a write the

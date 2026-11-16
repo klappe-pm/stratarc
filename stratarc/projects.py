@@ -354,13 +354,28 @@ def verify(cp, *, only: str | None = None) -> list[str]:
         return out
     # checkouts on disk that no manifest row claims, and nested repositories.
     # A public target has no row by design, so its checkout is not drift.
-    listed = set(cp.manifest) | public_targets()
+    # Non-status support folders (external, vendor, tests, scratch) and
+    # canonical-registry members without private configuration roots are not
+    # unlisted drift either.
+    registry_records = getattr(cp, "registry", None) or {}
+    listed = set(cp.manifest) | public_targets() | set(registry_records)
+    registry_repos = {rec.repository.casefold() for rec in registry_records.values() if rec.repository}
     bound_paths = {hit.resolve() for name in cp.manifest for hit in cp.find_checkout(name, projects)}
+    if registry_records:
+        try:
+            from stratarc.project_registry import load_locations
+
+            bound_paths |= {p.resolve() for p in load_locations(ROOT, projects, registry_records).values()}
+        except RegistryError:
+            pass
+    non_managed_folders = {"external", "vendor", "tests", "scratch", "harness", "session-data"}
     for pattern in ("*", "*/*", "*/*/*", "*/*/*/*"):
         for p in sorted(projects.glob(pattern)):
             rel = p.relative_to(projects)
-            # skip trash, worktree pools, and any other dot or underscore tree
+            # skip trash, worktree pools, support folders, and any dot or underscore tree
             if any(part.startswith((".", "_")) for part in rel.parts):
+                continue
+            if rel.parts and rel.parts[0] in non_managed_folders:
                 continue
             if not p.is_dir() or not (p / ".git").exists():
                 continue
@@ -371,8 +386,12 @@ def verify(cp, *, only: str | None = None) -> list[str]:
             nested_under = _enclosing_repo(p)
             if nested_under is not None:
                 continue
-            identities, _origin = checkout_identity(p)
-            if not listed.intersection(identities) and not _public_checkout(p):
+            identities, origin = checkout_identity(p)
+            if (
+                not listed.intersection(identities)
+                and not (origin and origin.casefold() in registry_repos)
+                and not _public_checkout(p)
+            ):
                 out.append(f"{p.name}: checkout at {short(p)} is not in the manifest")
     return out
 
@@ -570,8 +589,11 @@ def _warn_on_gitignored_delivered_paths(name: str, dst: pathlib.Path, delivered:
     missing file after a clone.
     """
     checked = {p for p in delivered if p.startswith(_GITIGNORE_CHECKED_PREFIXES)}
-    for path in sorted(_project_gitignored_paths(dst, checked)):
-        _note(f"{name}: {path} is delivered but {short(dst)}'s .gitignore excludes it; it will not reach a commit")
+    ignored = sorted(_project_gitignored_paths(dst, checked))
+    if ignored:
+        examples = ", ".join(ignored[:3]) + (f", and {len(ignored) - 3} more" if len(ignored) > 3 else "")
+        storage = " Use the private dotfile repository to save them." if (dst / ".private.git").is_dir() else ""
+        _note(f"{name}: {len(ignored)} generated files excluded by the project's gitignore ({examples}); present locally, absent from main-repository commits. Regenerate with stratarc sync on other checkouts.{storage}")
 
 
 # Renderer state is its own manifest field rather than an entry in the generic
@@ -748,6 +770,8 @@ def _compare_skills(
             drift.append(f"{name}: {prefix}{rel} is missing")
         elif rel not in recorded:
             notes.append(f"{name}: {prefix}{rel} is a protected project collision, kept")
+        elif path.read_bytes() == (skills_src / rel).read_bytes():
+            continue
         elif _locally_edited(path, recorded.get(rel)):
             notes.append(f"{name}: {prefix}{rel} is locally edited since delivery, kept")
         elif path.read_bytes() != (skills_src / rel).read_bytes():
@@ -1547,7 +1571,7 @@ def _sync_project_unlocked(name: str, dry: bool, cp=None) -> list[str]:
                         # This protects edits observed here; copying remains a
                         # separate path-based operation and is not atomic with
                         # the check against a concurrent writer.
-                        elif digest is not None and _locally_edited(out, digest):
+                        elif digest is not None and _locally_edited(out, digest) and out.read_bytes() != (skill / rel).read_bytes():
                             skill_collisions[target].add(staged_rel)
                             collided.add(rel)
                             retained[target + staged_rel] = digest

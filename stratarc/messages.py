@@ -133,7 +133,7 @@ _MESSAGES = (
         "msg-1115",
         UNAVAILABLE,
         "An adapter is older than the installed runtime: {detail}",
-        "Update the adapter with `stratarc adapter register`; the deploy continues.",
+        "Upgrade Stratarc or install an adapter verified against this runtime; the deploy continues. Registering unchanged metadata does not verify compatibility.",
     ),
     Message(
         "msg-1116",

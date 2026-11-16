@@ -26,17 +26,17 @@ SUPPORTS: dict[str, dict[str, str]] = {
     },
     "claude": {
         "supports": ">=2.1,<3",
-        "tested": "2.1.296",
-        "tested_on": "2026-10-09",
-        "exercised_by": "tests/test_adapters_claude.py; examples/notes-cli/expected/claude",
+        "tested": "2.1.325",
+        "tested_on": "2026-11-16",
+        "exercised_by": "tests/test_adapters_claude.py; scripts/verify-runtime-config.py (native synthetic configuration parsing, no inference)",
         # No repository evidence of an older format: the lower bound is the tested major.minor.
         "evidence": "none in the repository; lower bound is the tested major.minor",
     },
     "codex": {
         "supports": ">=0.156,<1",
-        "tested": "0.162.0",
-        "tested_on": "2026-10-09",
-        "exercised_by": "tests/test_adapters_codex.py; examples/notes-cli/expected/codex",
+        "tested": "0.169.0",
+        "tested_on": "2026-11-16",
+        "exercised_by": "tests/test_adapters_codex.py; scripts/verify-runtime-config.py (native synthetic configuration parsing, no inference)",
         # stratarc/adapters/codex.py, _agent_md_to_toml: the agent role file keys were verified against Codex 0.156.1 on 2026-09-23.
         "evidence": "adapter docstring in codex.py records the role file schema verified on 0.156.1",
     },
@@ -57,9 +57,9 @@ SUPPORTS: dict[str, dict[str, str]] = {
     },
     "opencode": {
         "supports": ">=1.4,<2",
-        "tested": "1.4.2",
-        "tested_on": "2026-10-09",
-        "exercised_by": "tests/test_adapters_opencode.py; examples/notes-cli/expected/opencode",
+        "tested": "1.19.0",
+        "tested_on": "2026-11-16",
+        "exercised_by": "tests/test_adapters_opencode.py; scripts/verify-runtime-config.py (native synthetic configuration parsing, no inference)",
         # stratarc/adapters/opencode.py: OpenCode 1.4.2 refuses a config carrying the V2 `permissions` array (verified 2026-09-23).
         "evidence": "opencode.py records the permission config format verified on 1.4.2; lower bound is 1.4",
     },

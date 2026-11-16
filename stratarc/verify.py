@@ -293,6 +293,19 @@ def _compare_runtime(name: str, mod: str, target: Path, stage: Path, root: Path,
     finally:
         if scratch is not None:
             shutil.rmtree(scratch, ignore_errors=True)
+    from stratarc import companions
+    from stratarc.adapters._components import RenderRefused
+
+    try:
+        companion_files = companions.files(name, stage, target)
+        if companion_files:
+            changed = companions.sync(name, stage, target, dry_run=True)
+            path = companion_files[0]
+            before = digest(path)
+            entries.append(_entry("runtime", name, path.name, DRIFTED if changed else VERIFIED, before, "" if changed else before, "companion configuration differs" if changed else "", str(path.parent)))
+    except (RenderRefused, OSError) as error:
+        notes.append(f"{name}: companion configuration not verified ({error})")
+        entries.append(_entry("runtime", name, ".claude.json", SKIPPED, detail=str(error)[:300], target=str(target.parent)))
     return entries
 
 

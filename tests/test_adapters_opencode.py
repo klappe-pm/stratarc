@@ -746,4 +746,4 @@ class TestCustomTargetHookPaths(unittest.TestCase):
             capture_output=True, text=True, check=False, timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(f"no hook registry at {target}/hooks/hooks.json", result.stderr)
+        self.assertIn(f"no hook registry at {target.resolve()}/hooks/hooks.json", result.stderr)

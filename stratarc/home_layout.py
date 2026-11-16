@@ -287,18 +287,19 @@ def _public_mode(path: Path) -> int:
         return 0o644 & ~mask
 
 
-def safe_write(path: Path, data: str | bytes, *, now: datetime | None = None, private: bool = True) -> Path | None:
+def safe_write(path: Path, data: str | bytes, *, now: datetime | None = None, private: bool = True, manage_parent: bool = True) -> Path | None:
     """Replace `path` with `data`, keeping a copy of what was there.
 
     A file that declares a newer schema than this tool understands is refused before anything is touched. The new content is written to a temporary file in the same directory and moved into place, so a reader never sees a partial file. Returns the backup path, or None when the file did not exist.
 
-    With `private` (the default) the file is mode 0600 and a missing parent is made 0700, as everything in the home is. With `private=False`, for a file in a source root, the file keeps the mode of the file it replaces, a new file is 0644 and a missing parent directory 0755 (both subject to the umask), and an existing directory is left alone. The backup copy is always 0600.
+    With `private` (the default) the file is mode 0600 and a missing parent is made 0700, as everything in the home is. Set `manage_parent=False` when the parent already exists outside the state directory and must keep its permissions. With `private=False`, for a file in a source root, the file keeps the mode of the file it replaces, a new file is 0644 and a missing parent directory 0755 (both subject to the umask), and an existing directory is left alone. The backup copy is always 0600.
     """
     path = Path(path)
     check_not_newer(path)
     payload = data.encode("utf-8") if isinstance(data, str) else data
     if private:
-        _mkdir(path.parent)
+        if manage_parent:
+            _mkdir(path.parent)
         file_mode = FILE_MODE
     else:
         try:

@@ -252,3 +252,55 @@ def test_explicit_binding_wins_over_a_same_named_test_copy(tmp_path):
     file.parent.mkdir()
     file.write_text(json.dumps({"schemaVersion": 1, "checkouts": [{"projectId": "alpha", "checkoutId": "primary", "path": str(primary), "primary": True}]}), encoding="utf-8")
     assert ControlPlane.load(plane).find_checkout("alpha", base) == [primary.resolve()]
+
+
+def test_registry_check_and_verify_accept_rootless_canonical_members_and_support_folders(tmp_path, monkeypatch):
+    root = tmp_path / "source"
+    config = root / "projects" / "roots"
+    (config / "alpha").mkdir(parents=True)
+    (config / "alpha" / "AGENTS.md").write_text("# alpha\n", encoding="utf-8")
+    (root / "stratarc.toml").write_text(
+        '[layout]\nproject_config_dir = "projects/roots"\ncontrol_plane = "projects/roots/control-plane.md"\ncontrol_plane_managed = false\n',
+        encoding="utf-8",
+    )
+    registry(
+        root,
+        [
+            {"id": "source", "name": "Source", "state": "active", "repository": "acme/source"},
+            {"id": "alpha", "name": "Alpha", "state": "active", "repository": "acme/alpha"},
+            {"id": "retired", "name": "Retired", "state": "archived", "repository": "acme/retired"},
+            {"id": "maptapbeer", "name": "MapTap.beer", "state": "active", "repository": None},
+        ],
+    )
+    plane = config / "control-plane.md"
+    plane.write_text(
+        "## projects\n\n| project | status | tier | root | origin |\n|---|---|---|---|---|\n| alpha | active | normal | [alpha/](alpha/AGENTS.md) | acme/alpha |\n",
+        encoding="utf-8",
+    )
+    (config / "remotes.json").write_text(
+        json.dumps({"source": "acme/source", "alpha": "acme/alpha", "maptapbeer": "acme/maptap-beer"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (config / "public-targets.json").write_text(json.dumps({"targets": ["acme/maptap-beer"]}) + "\n", encoding="utf-8")
+    assert projects_new.registry_problems(root) == []
+
+    base = tmp_path / "projects"
+    for rel in ("active/alpha", "inactive/retired", "active/MapTap.beer/maptapbeer", "external/third-party", "vendor/worklog", "tests/Alpha"):
+        (base / rel / ".git").mkdir(parents=True)
+    (root / "local").mkdir(exist_ok=True)
+    (root / "local" / "project-locations.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "checkouts": [
+                    {"projectId": "alpha", "checkoutId": "primary", "path": str((base / "active/alpha").resolve()), "primary": True},
+                    {"projectId": "maptapbeer", "checkoutId": "primary", "path": str((base / "active/MapTap.beer/maptapbeer").resolve()), "primary": True},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(projects, "ROOT", root)
+    monkeypatch.setattr(projects, "PROJECTS_SRC", config)
+    monkeypatch.setenv("STRATARC_PROJECTS_DIR", str(base))
+    assert projects.verify(ControlPlane.load(plane)) == []

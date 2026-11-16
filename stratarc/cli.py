@@ -211,6 +211,11 @@ def _home_start(flags: argparse.Namespace) -> tuple[int, dict]:
         # A root named by --root or STRATARC_SOURCE is used as given, the way every engine command uses it, so a stale one never sends the user back into setup.
         if not root.is_dir():
             raise CliError("msg-1001", param="root", path=root)
+        _require_source_root()
+        if flags.root:
+            if not (root / paths.CONFIG_NAME).is_file():
+                raise CliError("msg-1009", param="root", path=root)
+            setup.remember(root)
         return 0, {"text": setup.status(root, "--root" if flags.root else origin)}
     return setup.run(), {}
 

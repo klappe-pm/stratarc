@@ -203,8 +203,14 @@ def test_reconcile_in_a_scaffolded_root_gives_a_public_checkout_no_column(tmp_pa
 
     home = tmp_path / "home"
     home.mkdir()
+    engine_root = str(Path(__file__).resolve().parents[1])
+    existing_pythonpath = os.environ.get("PYTHONPATH", "")
     environment = {key: value for key, value in os.environ.items() if not key.startswith(("GIT_", "STRATARC_"))}
-    environment.update(HOME=str(home), STRATARC_HOME=str(home))
+    environment.update(
+        HOME=str(home),
+        STRATARC_HOME=str(home),
+        PYTHONPATH=engine_root + (os.pathsep + existing_pythonpath if existing_pythonpath else ""),
+    )
     source = home / "stratarc-source"
 
     def stratarc(*args: str) -> subprocess.CompletedProcess:
