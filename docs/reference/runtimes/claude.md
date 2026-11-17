@@ -22,7 +22,11 @@ This page is the reference for what Stratarc writes into the Claude Code target,
 
 ## Not Written
 
-User-level MCP servers live in `~/.claude.json`, outside the target, so a sync does not render them. It names each selected server in its output so nothing is dropped silently. Rules are not written as files at user scope, because the digest in `AGENTS.md` already carries them; inside a project, rules are written under `.claude/rules/`.
+User-level MCP servers live in `~/.claude.json`, outside the target. The sync orchestrator renders selected servers into that companion file, preserving entries it does not own; calling the adapter directly does not write the companion. Rules are not written as files at user scope, because the digest in `AGENTS.md` already carries them; inside a project, rules are written under `.claude/rules/`.
+
+## Compatibility Evidence
+
+On 2026-11-17, Claude Code 2.1.326 accepted scratch adapter output through `claude doctor`, including rendered permission policy and hook registrations. The scratch home had no authenticated account or trusted workspace, so installation and account warnings were expected and allow rules remained inactive. This verifies configuration parsing, not permission enforcement, hook execution, plugin loading, model behavior or MCP connectivity. The [2.1.326 changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) identified no required rendering change from 2.1.325; the existing rendering is retained for older versions.
 
 ## Projects
 

@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+### Documentation
+
+- Record bounded native parsing evidence for Claude Code 2.1.326 and MCP discovery for Cursor Agent 2026.11.13, and correct their MCP output references. Hook execution and live server connections are not claimed by these compatibility checks.
+
 ### Added
 
 - Antigravity CLI (`agy`) is a bundled runtime, the sixth, with the default target `~/.gemini/antigravity-cli`. Its adapter renders `skills/` and writes the `model` key of `settings.json` from `runtime_settings.agy`, translated through `runtime_settings.agy.aliases`, so a short name or a provider-qualified model id maps to the label agy stores. It writes no instruction file, because agy reads `~/.gemini/GEMINI.md`, and it renders no hooks, permissions or MCP servers. Enable it with a `[runtimes.agy]` table and list its directory under `runtimeDirectories` in `permissions.json`. A source root that already has `adapters/agy.py` must remove it, because a source adapter that reuses a bundled name is refused.

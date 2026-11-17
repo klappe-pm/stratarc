@@ -26,9 +26,9 @@ SUPPORTS: dict[str, dict[str, str]] = {
     },
     "claude": {
         "supports": ">=2.1,<3",
-        "tested": "2.1.325",
-        "tested_on": "2026-11-16",
-        "exercised_by": "tests/test_adapters_claude.py; scripts/verify-runtime-config.py (native synthetic configuration parsing, no inference)",
+        "tested": "2.1.326",
+        "tested_on": "2026-11-17",
+        "exercised_by": "tests/test_adapters_claude.py; scripts/verify-runtime-config.py; claude doctor (scratch rendered configuration accepted; no inference or hook execution verified)",
         # No repository evidence of an older format: the lower bound is the tested major.minor.
         "evidence": "none in the repository; lower bound is the tested major.minor",
     },
@@ -42,9 +42,9 @@ SUPPORTS: dict[str, dict[str, str]] = {
     },
     "cursor": {
         "supports": ">=2026.7,<2027",
-        "tested": "2026.7.23",
-        "tested_on": "2026-10-09",
-        "exercised_by": "tests/test_adapters_cursor.py; examples/notes-cli/expected/cursor",
+        "tested": "2026.11.13",
+        "tested_on": "2026-11-17",
+        "exercised_by": "tests/test_adapters_cursor.py; examples/notes-cli/expected/cursor; cursor-agent mcp list (scratch rendered MCP discovery only; hook execution and server connections unverified)",
         # The version is that of cursor-agent (calendar versioned, 2026.07.23), the command detection runs; the editor is versioned separately (3.18.25).
         "evidence": "none in the repository; lower bound is the tested major.minor of cursor-agent",
     },
