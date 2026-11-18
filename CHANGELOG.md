@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+## 0.5.0 - 2026-11-18
+
+### Fixed
+
+- The project permission sweep now skips folders named `templates`, as it already skipped `examples`, `fixtures` and `tests`. With `sandboxEnabled` set to false the sweep writes the full permissions block into every project scope `settings.json` it finds, and that rewrote the project templates in a source root, whose own checks forbid permission settings there.
+
 ### Documentation
 
 - Record Claude Code 2.1.327 compatibility from scratch-rendered settings and an invalid-setting control. The native `doctor` command can exit zero while reporting invalid settings, so its diagnostic output was inspected. Rendering is unchanged; enforcement, hook execution and live connectivity remain unverified.
