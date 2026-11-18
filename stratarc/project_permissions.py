@@ -49,7 +49,7 @@ from stratarc.permissions import (
 from stratarc.public_targets import PublicTargetsUnreadable, is_public_checkout, load_public_targets
 
 # Fixtures and worked examples hold files shaped like a runtime's project config, and rewriting one would change what a test or a reader sees.
-PRUNE = PRUNE_DIRS | frozenset({"examples", "expected", "fixtures", "testdata", "tests"})
+PRUNE = PRUNE_DIRS | frozenset({"examples", "expected", "fixtures", "templates", "testdata", "tests"})
 MAX_DEPTH = MAX_WALK_DEPTH  # directory depth below root that the walk descends
 RUNTIMES = ("claude", "codex", "gemini", "opencode")
 

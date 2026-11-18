@@ -121,7 +121,7 @@ class TestSweep:
 
         assert nested.read_text() == original
 
-    @pytest.mark.parametrize("folder", ["examples", "expected", "fixtures", "testdata", "tests"])
+    @pytest.mark.parametrize("folder", ["examples", "expected", "fixtures", "templates", "testdata", "tests"])
     def test_a_runtime_config_shaped_file_in_an_example_or_fixture_folder_is_left_alone(self, source, root, folder):
         nested = root / "proj5" / folder / "opencode" / "opencode.jsonc"
         original = json.dumps({"permission": {"*": "ask"}}, indent=2) + "\n"
