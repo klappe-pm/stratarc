@@ -127,6 +127,7 @@ def _write_if_different(
         return
     actions.append(f"write {short(path)}")
     if not dry_run:
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps(desired, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
@@ -176,17 +177,28 @@ def _claude_handler(
 
     Claude Code ignores bypassPermissions and auto when a project-scope file sets permissions.defaultMode, and starts the session in Manual mode instead; any other project-scope value there would override the user-scope mode. Either way the project-scope render never states a mode, so defaultMode is simply absent from claude_project_permissions' output. autoMode guidance is a user-scope concern only, so a project-scope autoMode key is removed rather than rewritten; carrying it forward here would hand the classifier the same rules twice. https://code.claude.com/docs/en/permission-modes
     """
-    data, error = _load_json_object(path)
+    explicit = bool(policy.get("_sandboxOverride"))
+    if explicit and not path.exists():
+        data, error = {}, ""
+    else:
+        data, error = _load_json_object(path)
     if error:
         actions.append(f"skip {short(path)}: {error}")
         return
-    if "permissions" not in data and "autoMode" not in data and policy.get("sandboxEnabled") is not False:
+    if (
+        "permissions" not in data
+        and "autoMode" not in data
+        and policy.get("sandboxEnabled") is not False
+        and not explicit
+    ):
         return
     desired = dict(data)
     desired["permissions"] = claude_project_permissions(policy)
     desired.pop("autoMode", None)
     if policy.get("sandboxEnabled") is False:
         desired["sandbox"] = {**data.get("sandbox", {}), "enabled": False}
+    elif explicit:
+        desired["sandbox"] = {**data.get("sandbox", {}), "enabled": True}
     _write_if_different(path, data, desired, dry_run, actions)
 
 
@@ -197,13 +209,23 @@ def _codex_handler(
 
     Text-based: only the head block (the top-level lines before the first table) is ever inspected or rewritten.
     """
+    explicit = bool(policy.get("_sandboxOverride"))
     try:
         text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        if not explicit:
+            return
+        text = ""
     except OSError as exc:
         actions.append(f"skip {short(path)}: {exc}")
         return
     head, tail = _split_codex_head(text)
-    if policy.get("sandboxEnabled") is False:
+    if explicit and policy.get("sandboxEnabled") is True:
+        rendered = set_top_level(text, "sandbox_mode", json.dumps("workspace-write"))
+        rendered = set_top_level(rendered, "approval_policy", json.dumps(codex_approval_policy(policy)))
+        if "codexApprovalsReviewer" in policy:
+            rendered = set_top_level(rendered, "approvals_reviewer", json.dumps(policy["codexApprovalsReviewer"]))
+    elif policy.get("sandboxEnabled") is False:
         rendered = _disable_sandbox(text)
         rendered = set_top_level(rendered, "approval_policy", json.dumps(codex_approval_policy(policy)))
         if "codexApprovalsReviewer" in policy:
@@ -216,6 +238,7 @@ def _codex_handler(
         return
     actions.append(f"write {short(path)}")
     if not dry_run:
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(rendered, encoding="utf-8")
 
 
@@ -433,6 +456,56 @@ def refuse_if_stale(
     return refusal(target if target is not None else home() / ".claude", policy_version(policy), source)
 
 
+_SANDBOX_VALUES = {"on": True, "off": False}
+_FRONTMATTER_SANDBOX = re.compile(r"(?m)^sandbox:\s*[\"']?(inherit|on|off)[\"']?\s*$")
+
+
+def _sandbox_overrides(source: pathlib.Path) -> dict[str, str]:
+    """Per-project sandbox choices from projects/roots/<name>/project.md frontmatter (`sandbox: inherit|on|off`).
+
+    Only an explicit `on` or `off` is returned; `inherit`, a missing key and an unreadable record all mean the shared permissions.json sandboxEnabled applies.
+    """
+    found: dict[str, str] = {}
+    try:
+        base = project_config_dir(source)
+    except Exception:
+        return found
+    if not base.is_dir():
+        return found
+    for record in sorted(base.glob("*/project.md")):
+        try:
+            text = record.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if not text.startswith("---"):
+            continue
+        front = text.split("---", 2)[1] if text.count("---") >= 2 else ""
+        match = _FRONTMATTER_SANDBOX.search(front)
+        if match and match.group(1) in _SANDBOX_VALUES:
+            found[record.parent.name] = match.group(1)
+    return found
+
+
+def _project_name(project: pathlib.Path, root: pathlib.Path, overrides: dict[str, str]) -> str:
+    """The checkout name a project-scope file belongs to: the folder under a status directory, so a worktree or nested folder maps to its checkout."""
+    try:
+        parts = project.relative_to(root).parts
+    except ValueError:
+        return project.name
+    for candidate in parts[:2][::-1]:
+        if candidate in overrides:
+            return candidate
+    return parts[1] if len(parts) >= 2 else (parts[0] if parts else project.name)
+
+
+def _effective_policy(policy: dict, name: str, overrides: dict[str, str]) -> dict:
+    """The shared policy with this project's explicit sandbox choice applied."""
+    choice = overrides.get(name)
+    if choice not in _SANDBOX_VALUES:
+        return policy
+    return {**policy, "sandboxEnabled": _SANDBOX_VALUES[choice], "_sandboxOverride": True}
+
+
 def sweep(
     source: pathlib.Path,
     root: pathlib.Path | None = None,
@@ -474,6 +547,17 @@ def sweep(
                 candidate = (runtime, project / filename)
                 if runtime in wanted and candidate not in found:
                     found.append(candidate)
+    overrides = _sandbox_overrides(source)
+    global_off = policy.get("sandboxEnabled") is False
+    for name, choice in overrides.items():
+        if (choice == "off") == global_off:
+            continue  # the project already matches the shared setting; only an existing file is rewritten
+        for checkout in sorted({root / name, *root.glob(f"*/{name}")}):
+            if checkout.is_dir() and (checkout / ".git").exists() and checkout not in scoped_by_path:
+                for runtime, filename in (("claude", ".claude/settings.json"), ("codex", ".codex/config.toml")):
+                    candidate = (runtime, checkout / filename)
+                    if runtime in wanted and candidate not in found:
+                        found.append(candidate)
     skipped_public: set[pathlib.Path] = set()
     for runtime, path in sorted(found, key=lambda item: item[1]):
         project = path.parent if runtime == "opencode" else path.parent.parent
@@ -486,7 +570,8 @@ def sweep(
             name, scope_policy = scoped_by_path[project]
             _scoped_handler(name, runtime, path, scope_policy, project, dry_run, actions)
         else:
-            _HANDLERS[runtime](path, policy, dry_run, actions)
+            effective = _effective_policy(policy, _project_name(project, root, overrides), overrides)
+            _HANDLERS[runtime](path, effective, dry_run, actions)
     return actions
 
 

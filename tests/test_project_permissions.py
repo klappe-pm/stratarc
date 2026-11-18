@@ -596,3 +596,85 @@ class TestMain:
         assert code == 2
         assert "refusing to write an older policy" in capsys.readouterr().err
         assert settings_path.read_text() == original
+
+
+class TestPerProjectSandbox:
+    """A project record's `sandbox: on|off|inherit` overrides the shared sandboxEnabled for that checkout alone."""
+
+    @staticmethod
+    def record(source: Path, name: str, value: str) -> None:
+        write_text(source / "projects-root" / name / "project.md", f"---\nname: {name}\nsandbox: {value}\n---\n\nbody\n")
+
+    @staticmethod
+    def checkout(root: Path, name: str) -> Path:
+        path = root / "active" / name
+        (path / ".git").mkdir(parents=True)
+        return path
+
+    @staticmethod
+    def policy(source: Path, sandbox_enabled) -> None:
+        data = dict(POLICY)
+        if sandbox_enabled is None:
+            data.pop("sandboxEnabled", None)
+        else:
+            data["sandboxEnabled"] = sandbox_enabled
+        write_json(source / "permissions.json", data)
+
+    def test_on_beats_a_global_off_and_creates_the_project_files(self, source, root):
+        self.policy(source, False)
+        self.record(source, "alpha", "on")
+        alpha = self.checkout(root, "alpha")
+        beta = self.checkout(root, "beta")
+
+        sweep(source, root)
+
+        assert read_json(alpha / ".claude" / "settings.json")["sandbox"]["enabled"] is True
+        codex = tomllib.loads((alpha / ".codex" / "config.toml").read_text())
+        assert codex["sandbox_mode"] == "workspace-write"
+        assert not (beta / ".claude" / "settings.json").exists()
+
+    def test_off_beats_a_global_on_and_creates_the_project_files(self, source, root):
+        self.policy(source, None)
+        self.record(source, "alpha", "off")
+        alpha = self.checkout(root, "alpha")
+
+        sweep(source, root)
+
+        assert read_json(alpha / ".claude" / "settings.json")["sandbox"]["enabled"] is False
+        codex = tomllib.loads((alpha / ".codex" / "config.toml").read_text())
+        assert codex["sandbox_mode"] == "danger-full-access"
+
+    def test_inherit_and_a_matching_choice_create_nothing(self, source, root):
+        self.policy(source, False)
+        self.record(source, "alpha", "inherit")
+        self.record(source, "beta", "off")
+        alpha = self.checkout(root, "alpha")
+        beta = self.checkout(root, "beta")
+
+        sweep(source, root)
+
+        assert not (alpha / ".claude" / "settings.json").exists()
+        assert not (beta / ".claude" / "settings.json").exists()
+
+    def test_an_existing_file_follows_the_choice_and_the_run_is_idempotent(self, source, root):
+        self.policy(source, False)
+        self.record(source, "alpha", "on")
+        alpha = self.checkout(root, "alpha")
+        write_json(alpha / ".claude" / "settings.json", {"sandbox": {"enabled": False, "autoAllowBashIfSandboxed": True}})
+
+        sweep(source, root)
+
+        data = read_json(alpha / ".claude" / "settings.json")
+        assert data["sandbox"] == {"enabled": True, "autoAllowBashIfSandboxed": True}
+        assert sweep(source, root) == []
+
+    def test_a_worktree_follows_its_checkout(self, source, root):
+        self.policy(source, False)
+        self.record(source, "alpha", "on")
+        alpha = self.checkout(root, "alpha")
+        tree = alpha / ".worktrees" / "feature"
+        write_json(tree / ".claude" / "settings.json", {"permissions": {"allow": []}})
+
+        sweep(source, root)
+
+        assert read_json(tree / ".claude" / "settings.json")["sandbox"]["enabled"] is True
