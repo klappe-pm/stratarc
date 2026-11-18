@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+## 0.6.0 - 2026-11-18
+
+### Added
+
+- A project can set its own sandbox choice. A source root's `projects-root/<name>/project.md` with frontmatter `sandbox: on` or `sandbox: off` overrides the shared `sandboxEnabled` in `permissions.json` for that checkout and its worktrees alone: `on` renders Claude Code `sandbox.enabled: true` and Codex `sandbox_mode = "workspace-write"`, `off` renders `sandbox.enabled: false` and `sandbox_mode = "danger-full-access"`. A choice that differs from the shared setting creates the project's `.claude/settings.json` and `.codex/config.toml` when they are missing. `inherit`, a missing key or an unreadable record leave the shared setting in force, and a choice that already matches it creates no file.
+
 ## 0.5.0 - 2026-11-18
 
 ### Fixed
