@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file. The format foll
 
 ### Documentation
 
+- Record Claude Code 2.1.327 compatibility from scratch-rendered settings and an invalid-setting control. The native `doctor` command can exit zero while reporting invalid settings, so its diagnostic output was inspected. Rendering is unchanged; enforcement, hook execution and live connectivity remain unverified.
 - Record bounded native parsing evidence for Claude Code 2.1.326 and MCP discovery for Cursor Agent 2026.11.13, and correct their MCP output references. Hook execution and live server connections are not claimed by these compatibility checks.
 
 ### Added
