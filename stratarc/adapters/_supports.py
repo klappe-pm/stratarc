@@ -34,9 +34,9 @@ SUPPORTS: dict[str, dict[str, str]] = {
     },
     "codex": {
         "supports": ">=0.156,<1",
-        "tested": "0.169.0",
-        "tested_on": "2026-11-16",
-        "exercised_by": "tests/test_adapters_codex.py; scripts/verify-runtime-config.py (native synthetic configuration parsing, no inference)",
+        "tested": "0.170.0",
+        "tested_on": "2026-11-18",
+        "exercised_by": "tests/test_adapters_codex.py; codex doctor --json (real policy and sandbox-enabled scratch variant: config.load ok; invalid approval and filter controls fail; overall doctor exits 1 without auth/network); codex mcp list --json (synthetic fixture discovery; no inference, enforcement or connectivity verified)",
         # stratarc/adapters/codex.py, _agent_md_to_toml: the agent role file keys were verified against Codex 0.156.1 on 2026-09-23.
         "evidence": "adapter docstring in codex.py records the role file schema verified on 0.156.1",
     },

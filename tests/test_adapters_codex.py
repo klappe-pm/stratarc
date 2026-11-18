@@ -804,16 +804,18 @@ class TestShellEnvironmentFilters(unittest.TestCase):
         return (target / "config.toml").read_text(), second, target
 
     def test_renders_include_entries_and_no_legacy_arrays(self):
-        text, second, _ = self._sync("")
-        policy = tomllib.loads(text)["shell_environment_policy"]
-        self.assertEqual(policy["inherit"], "all")
-        self.assertIs(policy["ignore_default_excludes"], True)
-        self.assertNotIn("include_only", policy)
-        self.assertNotIn("exclude", policy)
-        self.assertEqual(policy["filters"]["GH_TOKEN"], "include")
-        self.assertEqual(policy["filters"]["PATH"], "include")
-        self.assertEqual(policy["filters"]["HOME"], "include")
-        self.assertEqual(second, [])
+        for version in ((0, 169, 0), (0, 170, 0)):
+            with self.subTest(version=version):
+                text, second, _ = self._sync("", version=version)
+                policy = tomllib.loads(text)["shell_environment_policy"]
+                self.assertEqual(policy["inherit"], "all")
+                self.assertIs(policy["ignore_default_excludes"], True)
+                self.assertNotIn("include_only", policy)
+                self.assertNotIn("exclude", policy)
+                self.assertEqual(policy["filters"]["GH_TOKEN"], "include")
+                self.assertEqual(policy["filters"]["PATH"], "include")
+                self.assertEqual(policy["filters"]["HOME"], "include")
+                self.assertEqual(second, [])
 
     def test_migrates_legacy_arrays_and_keeps_set_table(self):
         existing = (
@@ -863,10 +865,12 @@ class TestShellEnvironmentFilters(unittest.TestCase):
         self.assertEqual(filters["GH_TOKEN"], "exclude")
 
     def test_older_codex_keeps_the_legacy_include_only_array(self):
-        text, _, _ = self._sync("", version=(0, 155, 1))
-        policy = tomllib.loads(text)["shell_environment_policy"]
-        self.assertIn("GH_TOKEN", policy["include_only"])
-        self.assertNotIn("filters", policy)
+        for version in ((0, 155, 1), (0, 168, 0)):
+            with self.subTest(version=version):
+                text, _, _ = self._sync("", version=version)
+                policy = tomllib.loads(text)["shell_environment_policy"]
+                self.assertIn("GH_TOKEN", policy["include_only"])
+                self.assertNotIn("filters", policy)
 
     def test_missing_codex_keeps_the_legacy_include_only_array(self):
         text, _, _ = self._sync("", version=None)
