@@ -26,8 +26,8 @@ SUPPORTS: dict[str, dict[str, str]] = {
     },
     "claude": {
         "supports": ">=2.1,<3",
-        "tested": "2.1.327",
-        "tested_on": "2026-11-18",
+        "tested": "2.1.328",
+        "tested_on": "2026-11-19",
         "exercised_by": "tests/test_adapters_claude.py; scripts/verify-runtime-config.py; claude doctor (real policy scratch rendering has no Invalid settings diagnostic; invalid defaultMode control diagnosed despite exit 0; no inference or hook execution verified)",
         # No repository evidence of an older format: the lower bound is the tested major.minor.
         "evidence": "none in the repository; lower bound is the tested major.minor",

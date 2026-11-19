@@ -26,7 +26,11 @@ User-level MCP servers live in `~/.claude.json`, outside the target. The sync or
 
 ## Compatibility Evidence
 
-On 2026-11-17, Claude Code 2.1.326 accepted scratch adapter output through `claude doctor`, including rendered permission policy and hook registrations. The scratch home had no authenticated account or trusted workspace, so installation and account warnings were expected and allow rules remained inactive. This verifies configuration parsing, not permission enforcement, hook execution, plugin loading, model behavior or MCP connectivity. The [2.1.326 changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) identified no required rendering change from 2.1.325; the existing rendering is retained for older versions.
+On 2026-11-19, Claude Code 2.1.328 loaded real source policy rendered into a scratch home through `claude doctor` without an `Invalid settings` diagnostic. An invalid `permissions.defaultMode` control produced that diagnostic despite also exiting zero, so exit status alone does not establish acceptance. Synthetic `claude mcp get stratarc-fixture` discovered a local echo fixture and reported the expected closed connection. No authenticated session, real MCP connection, hook execution, permission enforcement, plugin loading or model behavior was verified.
+
+The [2.1.328 release notes](https://github.com/anthropics/claude-code/releases/tag/v2.1.328), [settings reference](https://code.claude.com/docs/en/settings-reference), [hook reference](https://code.claude.com/docs/en/hooks) and installed CLI help identify no required rendering change from 2.1.327. Existing rendering and support bounds are retained. The reviewed surface covers permission lists and mode, directory access, auto-mode guidance, sandbox disablement, hook registrations, plugin enablement, model and environment passthrough, MCP companions and instruction, skill, command and agent paths.
+
+The release changes runtime behavior: Code Mode output no longer runs `UserPromptSubmit` hooks, managed `PostToolUse` hooks no longer run for calls refused before execution, sandbox startup failures are reported differently, and third-party providers gain auto-mode defaults. These changes do not rename the adapter's keys. Native parsing does not verify those behaviors; in particular, a prompt hook must not be assumed to redact Code Mode output. See the [hook reference](https://code.claude.com/docs/en/hooks#userpromptsubmit) for the new boundary.
 
 ## Projects
 
