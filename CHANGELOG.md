@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## Unreleased
 
+### Documentation
+
+- Record Claude Code 2.1.328 compatibility using scratch-rendered real policy, an invalid-setting control and synthetic MCP discovery. Rendering is unchanged; live hook, enforcement, plugin and model behavior remain unverified. Document the release's Code Mode prompt-hook boundary and other runtime behavior changes.
+
 ## 0.6.0 - 2026-11-18
 
 ### Added
