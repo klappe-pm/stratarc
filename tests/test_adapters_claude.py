@@ -120,6 +120,27 @@ class TestClaudeAdapter(unittest.TestCase):
         self.assertEqual(settings["permissions"]["deny"], ["Bash(rm -r *)"])
         self.assertTrue(settings["native"])
 
+    def test_hand_added_permissions_are_captured_before_replacement(self):
+        (self.source / "permissions.json").write_text(
+            '{"schemaVersion":1,"allow":["Bash(git *)"],"deny":[],"ask":[]}\n'
+        )
+        (self.target / "settings.json").write_text(
+            '{"permissions":{"allow":["Bash(git *)","Bash(jq *)"]}}\n'
+        )
+
+        preview = sync(self.source, self.target, dry_run=True)
+        store = self.source / "local" / "permission-captures.json"
+        self.assertTrue(any("Bash(jq *)" in a and "would be" in a for a in preview))
+        self.assertFalse(store.exists())
+
+        actions = sync(self.source, self.target)
+
+        settings = json.loads((self.target / "settings.json").read_text())
+        self.assertEqual(settings["permissions"]["allow"], ["Bash(git *)"])
+        self.assertTrue(any("Bash(jq *)" in a for a in actions))
+        captured = json.loads(store.read_text())["captured"]
+        self.assertEqual(captured["allow"], ["Bash(jq *)"])
+
     def test_auto_mode_block_renders_from_policy_and_replaces_stale_lists(self):
         (self.source / "permissions.json").write_text(
             '{"schemaVersion":1,"allow":[],"deny":[],"ask":[],"defaultMode":"bypassPermissions",'

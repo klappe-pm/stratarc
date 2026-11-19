@@ -144,6 +144,63 @@ def _desired_enabled_plugins(source: Path, target: Path, existing: object) -> di
     return enablement(known, list(selected_plugins(source, "claude")))
 
 
+_CAPTURED_KEYS = ("allow", "deny", "ask", "additionalDirectories")
+
+
+def _capture_dropped_permissions(
+    source: Path,
+    settings_path: Path,
+    existing_settings: dict,
+    desired_settings: dict,
+    dry_run: bool,
+) -> List[str]:
+    """Record permission entries the render is about to drop, and say so.
+
+    permissions.json stays the single source of truth, so a rule added by hand
+    to the runtime's settings.json is still replaced. It is no longer lost
+    silently: each dropped entry is appended to local/permission-captures.json
+    in the source root, and the action list names them so the operator can move
+    the ones they want into permissions.json.
+    """
+    have = existing_settings.get("permissions")
+    want = desired_settings.get("permissions")
+    if not isinstance(have, dict) or not isinstance(want, dict):
+        return []
+    dropped: dict = {}
+    for key in _CAPTURED_KEYS:
+        old, new = have.get(key), want.get(key, [])
+        if not isinstance(old, list) or not isinstance(new, list):
+            continue
+        extra = [e for e in dict.fromkeys(old) if isinstance(e, str) and e not in new]
+        if extra:
+            dropped[key] = extra
+    if not dropped:
+        return []
+    total = sum(len(v) for v in dropped.values())
+    store = source / "local" / "permission-captures.json"
+    if not dry_run:
+        try:
+            prior = json.loads(store.read_text(encoding="utf-8")) if store.is_file() else {}
+        except (OSError, ValueError):
+            prior = {}
+        entries = prior.get("captured") if isinstance(prior, dict) else None
+        entries = entries if isinstance(entries, dict) else {}
+        for key, values in dropped.items():
+            merged = list(entries.get(key, [])) if isinstance(entries.get(key), list) else []
+            entries[key] = list(dict.fromkeys(merged + values))
+        store.parent.mkdir(parents=True, exist_ok=True)
+        store.write_text(
+            json.dumps({"schemaVersion": 1, "captured": entries}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    listing = "; ".join(f"{k}: {', '.join(v)}" for k, v in dropped.items())
+    return [
+        f"WARNING: {total} permission entr{'y' if total == 1 else 'ies'} in {settings_path} "
+        f"are not in permissions.json and {'would be' if dry_run else 'were'} replaced "
+        f"({listing}). Saved to {store}; add the ones you want to permissions.json."
+    ]
+
+
 def sync(
     source: Path, target: Path, dry_run: bool = False,
 ) -> List[str]:
@@ -197,6 +254,12 @@ def sync(
     # 0c. enabledPlugins is owned as a whole: replaced, never merged,
     # so a hand-enabled plugin is switched back off and shows as drift.
     enabled_plugins = _desired_enabled_plugins(source, target, existing_settings.get("enabledPlugins"))
+    if policy:
+        actions.extend(
+            _capture_dropped_permissions(
+                source, settings_path, existing_settings, desired_settings, dry_run
+            )
+        )
     if desired_settings or enabled_plugins:
         merged_settings = _deep_merge(existing_settings, desired_settings)
         if enabled_plugins:
